@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="100%" height="100%">
+  <defs>
+    <linearGradient id="neonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a78bfa" />
+      <stop offset="50%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+  </defs>
+  <!-- Sleek dark background -->
+  <rect x="2" y="2" width="28" height="28" rx="8" fill="#09090b" stroke="url(#neonGrad)" stroke-width="2"/>
+  
+  <!-- Glowing coding shell prompt with terminal accent -->
+  <path d="M10 10 L16 16 L10 22" fill="none" stroke="url(#neonGrad)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="18" y="20" width="6" height="2.5" rx="1" fill="url(#neonGrad)"/>
+</svg>
