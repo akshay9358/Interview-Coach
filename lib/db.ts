@@ -240,8 +240,15 @@ async function syncWithSupabase(username: string, localProfile: UserProfile) {
         // Dispatch a custom event to notify React components to re-render
         window.dispatchEvent(new Event("profile_updated"));
       } else {
-        // XP is equal, check if local handles need to be updated from cloud
-        if (cloudProfile.cf_handle !== localProfile.cfHandle || cloudProfile.lc_handle !== localProfile.lcHandle) {
+        // XP is equal, check if we need to sync password to cloud or update handles
+        const usersRaw = localStorage.getItem("ic_users_db") || "{}";
+        const users = JSON.parse(usersRaw);
+        const localPassword = users[username.toLowerCase()];
+
+        if (localPassword && !cloudProfile.password) {
+          console.log(`Pushing password for "${username}" to Supabase cloud...`);
+          await pushProfileToSupabase(localProfile);
+        } else if (cloudProfile.cf_handle !== localProfile.cfHandle || cloudProfile.lc_handle !== localProfile.lcHandle) {
           const mergedProfile = {
             ...localProfile,
             cfHandle: cloudProfile.cf_handle || localProfile.cfHandle,
