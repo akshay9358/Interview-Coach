@@ -20,7 +20,7 @@ export default function LoginPage() {
     }
   }, [router]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
@@ -31,25 +31,67 @@ export default function LoginPage() {
       return;
     }
 
-    // Mock Credentials Database check in LocalStorage
-    setTimeout(() => {
-      const usersRaw = localStorage.getItem("ic_users_db");
-      const users = usersRaw ? JSON.parse(usersRaw) : {};
+    // 1. Try local credentials check first
+    const usersRaw = localStorage.getItem("ic_users_db");
+    const users = usersRaw ? JSON.parse(usersRaw) : {};
+    const storedPassword = users[username.toLowerCase()];
 
-      // If user database is empty or user not found, let's check standard fallback user: "guest" / "guest123"
-      const storedPassword = users[username.toLowerCase()];
-      
-      if (
-        (username.toLowerCase() === "guest" && password === "guest123") ||
-        (storedPassword && storedPassword === password)
-      ) {
-        setLoggedInUser(username);
-        router.push("/dashboard");
-      } else {
-        setError("Invalid username or password. Try 'guest' and 'guest123' to test!");
-        setLoading(false);
+    if (
+      (username.toLowerCase() === "guest" && password === "guest123") ||
+      (storedPassword && storedPassword === password)
+    ) {
+      setLoggedInUser(username);
+      router.push("/dashboard");
+      return;
+    }
+
+    // 2. If local check fails, query Supabase Cloud (for multi-device sync)
+    try {
+      const { supabase } = await import("@/lib/db");
+      if (supabase) {
+        const { data: cloudProfile, error: cloudErr } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("username", username.toLowerCase())
+          .single();
+
+        if (cloudProfile && cloudProfile.password === password) {
+          // Sync credentials locally
+          users[username.toLowerCase()] = password;
+          localStorage.setItem("ic_users_db", JSON.stringify(users));
+
+          // Sync profile data locally
+          const profilesRaw = localStorage.getItem("ic_profiles") || "{}";
+          const profiles = JSON.parse(profilesRaw);
+          profiles[username] = {
+            username: cloudProfile.username,
+            cfHandle: cloudProfile.cf_handle,
+            lcHandle: cloudProfile.lc_handle,
+            streak: cloudProfile.streak,
+            lastActiveDate: cloudProfile.last_active_date,
+            xp: cloudProfile.xp,
+            solvedList: cloudProfile.solved_list || [],
+            solvedPuzzles: cloudProfile.solved_puzzles || [],
+            solvedSql: cloudProfile.solved_sql || [],
+            solvedCustomCount: cloudProfile.solved_custom_count || 0,
+            solvedPuzzleAnswers: cloudProfile.solved_puzzle_answers || {},
+            solvedSqlAnswers: cloudProfile.solved_sql_answers || {},
+            activityLog: cloudProfile.activity_log || {},
+            timedSessions: cloudProfile.timed_sessions || []
+          };
+          localStorage.setItem("ic_profiles", JSON.stringify(profiles));
+
+          setLoggedInUser(username);
+          router.push("/dashboard");
+          return;
+        }
       }
-    }, 800);
+    } catch (err) {
+      console.error("Supabase cloud login validation error:", err);
+    }
+
+    setError("Invalid username or password. Try 'guest' and 'guest123' to test!");
+    setLoading(false);
   };
 
   return (

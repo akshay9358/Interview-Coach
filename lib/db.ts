@@ -229,6 +229,14 @@ async function syncWithSupabase(username: string, localProfile: UserProfile) {
         localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(profiles));
         cachedProfiles[username] = pulledProfile;
 
+        // Sync password from cloud to local credentials DB
+        if (cloudProfile.password) {
+          const usersRaw = localStorage.getItem("ic_users_db") || "{}";
+          const users = JSON.parse(usersRaw);
+          users[username.toLowerCase()] = cloudProfile.password;
+          localStorage.setItem("ic_users_db", JSON.stringify(users));
+        }
+
         // Dispatch a custom event to notify React components to re-render
         window.dispatchEvent(new Event("profile_updated"));
       } else {
@@ -260,6 +268,10 @@ async function syncWithSupabase(username: string, localProfile: UserProfile) {
 async function pushProfileToSupabase(profile: UserProfile) {
   if (!supabase) return;
 
+  const usersRaw = typeof window !== "undefined" ? (localStorage.getItem("ic_users_db") || "{}") : "{}";
+  const users = JSON.parse(usersRaw);
+  const localPassword = users[profile.username.toLowerCase()] || null;
+
   const { error } = await supabase
     .from("profiles")
     .upsert({
@@ -276,7 +288,8 @@ async function pushProfileToSupabase(profile: UserProfile) {
       solved_puzzle_answers: profile.solvedPuzzleAnswers || {},
       solved_sql_answers: profile.solvedSqlAnswers || {},
       activity_log: profile.activityLog,
-      timed_sessions: profile.timedSessions || []
+      timed_sessions: profile.timedSessions || [],
+      password: localPassword
     });
 
   if (error) {
