@@ -1,0 +1,88 @@
+# Implementation Plan: Supabase Integration & Auto-Migration Layer
+
+This plan outlines the integration of **Supabase** as the primary cloud database, alongside a **hybrid fallback & auto-migration engine**. This ensures that progress currently stored in your browser's `localStorage` is safely migrated to the cloud without any data loss, and that the app is robust enough to run locally or on Vercel seamlessly.
+
+## User Action Required (To Activate Supabase)
+
+To get started, you will need to create a free database project on Supabase and provide your connection keys. You can do this at any time, and the app will continue to run safely in local storage mode until you do.
+
+### 1. Create a Supabase Project
+1. Go to [supabase.com](https://supabase.com) and create a free account.
+2. Click **New Project** and name it (e.g., `Interview-Coach`).
+3. Set a database password and select a region closest to you.
+
+### 2. Run Database Schema Script
+Once your project is ready, go to the **SQL Editor** tab in your Supabase dashboard, paste the following SQL script, and click **Run**:
+
+```sql
+-- Create the profiles table matching our frontend typescript interfaces
+create table if not exists profiles (
+  username text primary key,
+  cf_handle text,
+  lc_handle text,
+  streak integer default 0,
+  last_active_date text,
+  xp integer default 0,
+  solved_list text[] default array[]::text[],
+  solved_puzzles text[] default array[]::text[],
+  solved_sql text[] default array[]::text[],
+  solved_custom_count integer default 0,
+  solved_puzzle_answers jsonb default '{}'::jsonb,
+  solved_sql_answers jsonb default '{}'::jsonb,
+  activity_log jsonb default '{}'::jsonb,
+  timed_sessions jsonb default '[]'::jsonb,
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- Enable Row Level Security (RLS) or leave it open for simple public access
+alter table profiles enable row level security;
+
+-- Create a simple policy to allow public read/write access for this demo anonymous key
+create policy "Allow public access" 
+on profiles for all 
+using (true) 
+with check (true);
+```
+
+### 3. Add Connection Keys to `.env.local`
+In your local root directory (`c:\Users\Akshay\OneDrive\Documents\Antigravity\Interview-Coach`), create a file named `.env.local` and paste your project keys:
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anonymous-anon-public-key
+```
+*(You can retrieve these keys in Supabase by going to **Project Settings** -> **API**).*
+
+---
+
+## Proposed Changes
+
+We will implement a **hybrid data controller** inside `lib/db.ts`. 
+
+### [Component Name] Database Sync Engine (`lib/db.ts`)
+
+#### [MODIFY] [db.ts](file:///c:/Users/Akshay/OneDrive/Documents/Antigravity/Interview-Coach/lib/db.ts)
+* **Conditional Supabase Initialization**: We initialize the Supabase client safely. If connection keys are missing in `.env.local`, the client is disabled, and the app runs in **Local Storage Fallback Mode**.
+* **Automatic Progress Migration**: 
+  - When the user opens the application, the app checks if `localStorage` has a valid progress history.
+  - If a local profile is found and Supabase is active, the app automatically **migrates** this profile by sending a single upsert transaction to the Supabase cloud, saving all your XP, streaks, solved lists, previous answers, and stopwatch sessions safely to PostgreSQL.
+  - After successful migration, it sets a local flag `ic_cloud_migrated = true` so the migration does not run again.
+* **Refactored Async Database APIs**:
+  - We will modify `getUserProfile`, `saveUserProfile`, `recordSolve`, and `recordTimedSession` to support synchronous wrapper APIs that handle both modes:
+    - In **Local Storage Mode**: They execute instantly on `localStorage`.
+    - In **Supabase Cloud Mode**: They send asynchronous updates to Supabase, but update a fast in-memory React state cache so the UI remains incredibly snappy and never suffers lag.
+
+---
+
+## Verification Plan
+
+### Automated/Local Tests
+1. **Fallback Validation**: Run the app locally with no `.env.local` file configured. Verify that everything works exactly as before with local storage.
+2. **Migration Validation**: 
+   - Add your Supabase keys to `.env.local`.
+   - Open the app. Verify that a background request is made to Supabase to insert the profile.
+   - Check the Supabase Dashboard's table visualizer to ensure all your solved lists, XP, and answers were successfully created in the cloud.
+3. **Durability Validation**: Reload the page, clear local storage completely, and verify that the app successfully recovers all your progress directly from the cloud!
+
+---
+
+Please let me know if this implementation plan is perfect and if you would like me to proceed with setting up the hybrid wrapper code!
