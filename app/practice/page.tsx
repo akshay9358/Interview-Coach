@@ -56,9 +56,9 @@ export default function PracticeTracker() {
           title: prob.name,
           platform: "Codeforces" as const,
           category: "CP" as const,
-          difficulty: prob.rating 
+          difficulty: (prob.rating 
             ? (prob.rating < 1200 ? "Easy" : prob.rating < 1600 ? "Medium" : "Hard")
-            : "Medium" as const,
+            : "Medium") as "Easy" | "Medium" | "Hard",
           problemUrl: `https://codeforces.com/problemset/problem/${prob.contestId}/${prob.index}`,
           problemCode: `${prob.contestId}${prob.index}`
         }));
