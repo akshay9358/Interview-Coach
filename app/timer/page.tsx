@@ -141,6 +141,11 @@ export default function TimedPracticePage() {
         console.error("Error restoring saved timer", e);
       }
     }
+
+    const savedLevel = localStorage.getItem("ic_cf_selected_level");
+    if (savedLevel && ["A", "B", "C", "D", "E", "F", "G"].includes(savedLevel)) {
+      setSelectedCfLevel(savedLevel);
+    }
   }, []);
 
   // Update timer tick
@@ -164,13 +169,27 @@ export default function TimedPracticePage() {
       setCfProblemsLoading(true);
       setCfProblemsError(null);
       try {
+        // 1. Try to load from localStorage cache first to avoid re-fetching!
+        const cachedProbs = localStorage.getItem("ic_cf_cached_problems");
+        const cachedMap = localStorage.getItem("ic_cf_cached_contest_map");
+        const cacheTime = localStorage.getItem("ic_cf_cached_time");
+        const isCacheValid = cacheTime && (Date.now() - parseInt(cacheTime) < 1800000); // 30 minutes cache validity
+
+        if (cachedProbs && cachedMap && isCacheValid) {
+          setCfProblems(JSON.parse(cachedProbs));
+          const mapData = JSON.parse(cachedMap);
+          setContestMap(new Map(Object.entries(mapData).map(([k, v]) => [parseInt(k), v as string])));
+          setCfProblemsLoading(false);
+          return;
+        }
+
         // Fetch contests to map Div. 3 and Div. 4
+        const cmap = new Map<number, string>();
         try {
           const contestsResponse = await fetch("https://codeforces.com/api/contest.list");
           if (contestsResponse.ok) {
             const contestsData = await contestsResponse.json();
             if (contestsData.status === "OK" && contestsData.result) {
-              const cmap = new Map<number, string>();
               for (const contest of contestsData.result) {
                 cmap.set(contest.id, contest.name);
               }
@@ -183,6 +202,11 @@ export default function TimedPracticePage() {
 
         const probs = await fetchCodeforcesProblemset();
         setCfProblems(probs);
+
+        // Save to cache
+        localStorage.setItem("ic_cf_cached_problems", JSON.stringify(probs));
+        localStorage.setItem("ic_cf_cached_contest_map", JSON.stringify(Object.fromEntries(cmap)));
+        localStorage.setItem("ic_cf_cached_time", Date.now().toString());
       } catch (err: any) {
         setCfProblemsError(err.message || "Failed to load Codeforces problems");
       } finally {
@@ -669,6 +693,50 @@ export default function TimedPracticePage() {
     return s > 0 ? `${m}m ${s}s` : `${m}m`;
   };
 
+  const getProblemRatingAndLink = () => {
+    let rating: number | string = "N/A";
+    let isPredicted = true;
+    let url = problemLink;
+
+    if (platform === "Codeforces") {
+      const parseCFLink = (link: string) => {
+        const problemsetMatch = link.match(/\/problemset\/problem\/(\d+)\/([A-Z0-9]+)/i);
+        if (problemsetMatch) {
+          return { contestId: parseInt(problemsetMatch[1]), index: problemsetMatch[2].toUpperCase() };
+        }
+        const contestMatch = link.match(/\/contest\/(\d+)\/problem\/([A-Z0-9]+)/i);
+        if (contestMatch) {
+          return { contestId: parseInt(contestMatch[1]), index: contestMatch[2].toUpperCase() };
+        }
+        const simpleMatch = link.trim().match(/^(\d+)([A-Z0-9]+)$/i);
+        if (simpleMatch) {
+          return { contestId: parseInt(simpleMatch[1]), index: simpleMatch[2].toUpperCase() };
+        }
+        return null;
+      };
+
+      const parsed = parseCFLink(problemLink);
+      if (parsed) {
+        const matchedCf = cfProblems.find(p => p.contestId === parsed.contestId && p.index.toUpperCase() === parsed.index);
+        if (matchedCf && matchedCf.rating) {
+          rating = matchedCf.rating;
+          isPredicted = false;
+        }
+        url = `https://codeforces.com/problemset/problem/${parsed.contestId}/${parsed.index}`;
+      }
+    }
+
+    if (rating === "N/A") {
+      if (difficulty === "Easy") rating = 1000;
+      else if (difficulty === "Medium") rating = 1400;
+      else if (difficulty === "Hard") rating = 1800;
+      isPredicted = true;
+    }
+
+    const isValidUrl = url.startsWith("http://") || url.startsWith("https://");
+    return { rating, isPredicted, url, isValidUrl };
+  };
+
   if (!profile) return null;
 
   const sessions = profile.timedSessions || [];
@@ -856,7 +924,10 @@ export default function TimedPracticePage() {
                     {levels.map(level => (
                       <button
                         key={level}
-                        onClick={() => setSelectedCfLevel(level)}
+                        onClick={() => {
+                          setSelectedCfLevel(level);
+                          localStorage.setItem("ic_cf_selected_level", level);
+                        }}
                         className={`px-3.5 py-1.5 rounded text-xs font-bold transition-all ${selectedCfLevel === level
                           ? "bg-violet-600 text-white shadow-inner"
                           : "text-zinc-500 hover:text-white"
@@ -1111,6 +1182,36 @@ export default function TimedPracticePage() {
                       </select>
                     </div>
                   </div>
+
+                  {/* Dynamic Rating & Clickable Link Preview */}
+                  {(problemTitle || problemLink) && (() => {
+                    const { rating, isPredicted, url, isValidUrl } = getProblemRatingAndLink();
+                    return (
+                      <div className="mt-4 p-3.5 rounded-xl border border-white/5 bg-black/40 flex items-center justify-between text-xs animate-fadeIn">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[9px]">Rating:</span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            isPredicted 
+                              ? "bg-zinc-500/10 border border-zinc-500/20 text-zinc-400" 
+                              : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                          }`}>
+                            {rating} {isPredicted && <span className="text-[8px] font-normal opacity-50 ml-0.5">(Predicted)</span>}
+                          </span>
+                        </div>
+                        {isValidUrl && (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1 font-bold text-[10px] bg-violet-500/10 border border-violet-500/20 px-2.5 py-1 rounded-lg"
+                          >
+                            <span>Open Problem</span>
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 

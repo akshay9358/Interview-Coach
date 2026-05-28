@@ -54,7 +54,7 @@ const seedMockActivity = () => {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
     const dateStr = d.toISOString().split("T")[0];
-    
+
     // Seed ~40% of the days with random solves between 1 and 4
     if (Math.random() > 0.6) {
       log[dateStr] = Math.floor(Math.random() * 3) + 1;
@@ -67,7 +67,7 @@ const seedMockActivity = () => {
 const seedMockTimedSessions = (): TimedSession[] => {
   const sessions: TimedSession[] = [];
   const today = new Date();
-  
+
   const templates: Array<{
     title: string;
     linkOrId: string;
@@ -75,19 +75,19 @@ const seedMockTimedSessions = (): TimedSession[] => {
     difficulty: "Easy" | "Medium" | "Hard";
     baseTime: number; // in seconds
   }> = [
-    { title: "Two Sum", linkOrId: "https://leetcode.com/problems/two-sum/", platform: "LeetCode", difficulty: "Easy", baseTime: 720 },
-    { title: "Watermelon", linkOrId: "4A", platform: "Codeforces", difficulty: "Easy", baseTime: 540 },
-    { title: "Duplicate Emails", linkOrId: "duplicate-emails", platform: "SQL", difficulty: "Easy", baseTime: 420 },
-    { title: "Valid Parentheses", linkOrId: "https://leetcode.com/problems/valid-parentheses/", platform: "LeetCode", difficulty: "Easy", baseTime: 360 },
-    { title: "Cut Ribbon", linkOrId: "189A", platform: "Codeforces", difficulty: "Medium", baseTime: 1450 },
-    { title: "9 Balls Weight Puzzle", linkOrId: "9-balls-weight", platform: "Puzzles", difficulty: "Medium", baseTime: 980 }
-  ];
+      { title: "Two Sum", linkOrId: "https://leetcode.com/problems/two-sum/", platform: "LeetCode", difficulty: "Easy", baseTime: 720 },
+      { title: "Watermelon", linkOrId: "4A", platform: "Codeforces", difficulty: "Easy", baseTime: 540 },
+      { title: "Duplicate Emails", linkOrId: "duplicate-emails", platform: "SQL", difficulty: "Easy", baseTime: 420 },
+      { title: "Valid Parentheses", linkOrId: "https://leetcode.com/problems/valid-parentheses/", platform: "LeetCode", difficulty: "Easy", baseTime: 360 },
+      { title: "Cut Ribbon", linkOrId: "189A", platform: "Codeforces", difficulty: "Medium", baseTime: 1450 },
+      { title: "9 Balls Weight Puzzle", linkOrId: "9-balls-weight", platform: "Puzzles", difficulty: "Medium", baseTime: 980 }
+    ];
 
   templates.forEach((tpl, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() - (15 - i * 2.5));
     const dateStr = d.toISOString().split("T")[0];
-    
+
     const variation = Math.floor(Math.random() * 40) - 20; // +/- 20s
     const improvementFactor = 1 - (i * 0.08); // Up to 40% speed improvement
     const finalTime = Math.max(120, Math.floor(tpl.baseTime * improvementFactor) + variation);
@@ -147,7 +147,7 @@ export function setLoggedInUser(username: string | null) {
  */
 export function getUserProfile(username: string): UserProfile {
   if (typeof window === "undefined") return DEFAULT_PROFILE;
-  
+
   // Return in-memory cache if available
   if (cachedProfiles[username]) {
     return cachedProfiles[username];
@@ -155,7 +155,7 @@ export function getUserProfile(username: string): UserProfile {
 
   const profilesRaw = localStorage.getItem(STORAGE_KEYS.PROFILES);
   const profiles = profilesRaw ? JSON.parse(profilesRaw) : {};
-  
+
   if (!profiles[username]) {
     profiles[username] = { ...DEFAULT_PROFILE, username };
     localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(profiles));
@@ -168,7 +168,7 @@ export function getUserProfile(username: string): UserProfile {
   if (supabase) {
     syncWithSupabase(username, profiles[username]);
   }
-  
+
   return profiles[username];
 }
 
@@ -204,7 +204,7 @@ async function syncWithSupabase(username: string, localProfile: UserProfile) {
       } else if (cloudXP > localXP) {
         // Cloud has more solved progress (perhaps solved on another device). Pull down.
         console.log(`Syncing down: Supabase has more XP (${cloudXP} > ${localXP}). Overwriting local storage...`);
-        
+
         const pulledProfile: UserProfile = {
           username: cloudProfile.username,
           cfHandle: cloudProfile.cf_handle,
@@ -259,7 +259,7 @@ async function syncWithSupabase(username: string, localProfile: UserProfile) {
           const profiles = profilesRaw ? JSON.parse(profilesRaw) : {};
           profiles[username] = mergedProfile;
           localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(profiles));
-          
+
           window.dispatchEvent(new Event("profile_updated"));
         }
       }
@@ -308,10 +308,10 @@ async function pushProfileToSupabase(profile: UserProfile) {
 
 export function saveUserProfile(profile: UserProfile) {
   if (typeof window === "undefined") return;
-  
+
   // Re-calculate streak
   const updatedProfile = calculateStreak(profile);
-  
+
   // Update memory cache
   cachedProfiles[profile.username] = updatedProfile;
 
@@ -331,16 +331,16 @@ export function saveUserProfile(profile: UserProfile) {
  * Triggers a solve record update. Increases XP, adds to solved array, updates activityLog.
  */
 export function recordSolve(
-  username: string, 
-  itemType: "problem" | "puzzle" | "sql" | "custom", 
+  username: string,
+  itemType: "problem" | "puzzle" | "sql" | "custom",
   itemId: string,
   answer?: string
 ) {
   const profile = getUserProfile(username);
   const todayStr = new Date().toISOString().split("T")[0];
-  
+
   let isNewSolve = false;
-  
+
   if (itemType === "problem") {
     if (!profile.solvedList.includes(itemId)) {
       profile.solvedList.push(itemId);
@@ -374,7 +374,7 @@ export function recordSolve(
     profile.xp += 15; // 15 XP per custom log
     isNewSolve = true;
   }
-  
+
   if (isNewSolve) {
     profile.activityLog[todayStr] = (profile.activityLog[todayStr] || 0) + 1;
     saveUserProfile(profile);
@@ -397,11 +397,11 @@ export function recordTimedSession(
 ) {
   const profile = getUserProfile(username);
   const todayStr = new Date().toISOString().split("T")[0];
-  
+
   if (!profile.timedSessions) {
     profile.timedSessions = [];
   }
-  
+
   const newSession: TimedSession = {
     id: `ts-${Date.now()}`,
     title: sessionData.title || "Untitled Problem",
@@ -411,13 +411,13 @@ export function recordTimedSession(
     timeSpentSeconds: sessionData.timeSpentSeconds,
     solvedAt: todayStr
   };
-  
+
   profile.timedSessions.push(newSession);
   profile.xp += 30; // 30 XP per timed practice!
-  
+
   // Register solve in contribution activity heatmap
   profile.activityLog[todayStr] = (profile.activityLog[todayStr] || 0) + 1;
-  
+
   saveUserProfile(profile);
 }
 
@@ -427,34 +427,34 @@ export function recordTimedSession(
 function calculateStreak(profile: UserProfile): UserProfile {
   const activityLog = profile.activityLog || {};
   const dates = Object.keys(activityLog).filter(d => activityLog[d] > 0).sort();
-  
+
   if (dates.length === 0) {
     profile.streak = 0;
     return profile;
   }
-  
+
   const today = new Date();
-  today.setHours(0,0,0,0);
-  
+  today.setHours(0, 0, 0, 0);
+
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
-  
+
   const todayStr = today.toISOString().split("T")[0];
   const yesterdayStr = yesterday.toISOString().split("T")[0];
-  
+
   const hasSolvedRecently = activityLog[todayStr] > 0 || activityLog[yesterdayStr] > 0;
   if (!hasSolvedRecently) {
     profile.streak = 0;
     return profile;
   }
-  
+
   let streak = 0;
   let currentCheck = new Date(today);
-  
+
   if (!(activityLog[todayStr] > 0)) {
     currentCheck = new Date(yesterday);
   }
-  
+
   while (true) {
     const checkStr = currentCheck.toISOString().split("T")[0];
     if (activityLog[checkStr] > 0) {
@@ -464,7 +464,7 @@ function calculateStreak(profile: UserProfile): UserProfile {
       break;
     }
   }
-  
+
   profile.streak = streak;
   profile.lastActiveDate = dates[dates.length - 1];
   return profile;
