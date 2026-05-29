@@ -117,7 +117,7 @@ export default function Heatmap({ activityLog }: HeatmapProps) {
   const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   return (
-    <div className="relative p-6 rounded-2xl border border-white/5 bg-zinc-950/40 backdrop-blur-md overflow-x-auto w-full select-none">
+    <div className="relative pt-12 pb-6 px-6 rounded-2xl border border-white/5 bg-zinc-950/40 backdrop-blur-md overflow-x-auto w-full select-none">
       <div className="min-w-[760px] relative">
         {/* Month Row */}
         <div className="flex text-[10px] text-zinc-500 font-semibold mb-2 ml-8 h-4 relative">

@@ -26,6 +26,7 @@ export default function PracticeTracker() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [activeTab, setActiveTab] = useState<"All" | "DSA" | "CP">("All");
   const [difficultyFilter, setDifficultyFilter] = useState<"All" | "Easy" | "Medium" | "Hard">("All");
+  const [statusFilter, setStatusFilter] = useState<"All" | "Solved" | "Unsolved">("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [verifyMessage, setVerifyMessage] = useState<{ id: string; text: string; error: boolean } | null>(null);
@@ -82,6 +83,14 @@ export default function PracticeTracker() {
     setProfile(getUserProfile(profile.username));
   };
 
+  const handleDifficultyClick = (diff: "Easy" | "Medium" | "Hard") => {
+    if (difficultyFilter === diff) {
+      setDifficultyFilter("All");
+    } else {
+      setDifficultyFilter(diff);
+    }
+  };
+
   const handleVerifyCodeforces = async (problem: PracticeProblem) => {
     if (!profile) return;
     if (!profile.cfHandle) {
@@ -130,13 +139,32 @@ export default function PracticeTracker() {
 
   const allProblems = [...standardProblems, ...dynamicProblems];
 
-  // Filter problems
+  // Calculate counts w.r.t active category (tab) & difficulty
+  const baseFiltered = allProblems.filter(problem => {
+    const matchesTab = activeTab === "All" || problem.category === activeTab;
+    const matchesDifficulty = difficultyFilter === "All" || problem.difficulty === difficultyFilter;
+    return matchesTab && matchesDifficulty;
+  });
+
+  const totalCount = baseFiltered.length;
+  const solvedCount = baseFiltered.filter(p => profile.solvedList.includes(p.id)).length;
+  const unsolvedCount = totalCount - solvedCount;
+
+  // Filter problems for display
   const filteredProblems = allProblems.filter(problem => {
     const matchesTab = activeTab === "All" || problem.category === activeTab;
     const matchesDifficulty = difficultyFilter === "All" || problem.difficulty === difficultyFilter;
     const matchesSearch = problem.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           problem.platform.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesTab && matchesDifficulty && matchesSearch;
+    
+    const isSolved = profile.solvedList.includes(problem.id);
+    const matchesStatus = statusFilter === "All" 
+      ? true 
+      : statusFilter === "Solved" 
+        ? isSolved 
+        : !isSolved;
+
+    return matchesTab && matchesDifficulty && matchesSearch && matchesStatus;
   });
 
   const getDifficultyStyles = (diff: string) => {
@@ -170,7 +198,7 @@ export default function PracticeTracker() {
           {/* Top Filter and Search Bar */}
           <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-zinc-900/40 p-5 rounded-2xl border border-white/5 backdrop-blur-sm">
             {/* Platform categories */}
-            <div className="flex gap-1 bg-black/60 p-1.5 rounded-xl border border-white/5 w-full md:w-auto">
+            <div className="flex gap-1 bg-black/60 p-1.5 rounded-xl border border-white/5 w-full md:w-auto shrink-0">
               {(["All", "DSA", "CP"] as const).map(tab => (
                 <button
                   key={tab}
@@ -186,12 +214,35 @@ export default function PracticeTracker() {
               ))}
             </div>
 
-            {/* Platform difficulty filter */}
-            <div className="flex flex-wrap gap-2 w-full md:w-auto justify-end">
-              {(["All", "Easy", "Medium", "Hard"] as const).map(diff => (
+            {/* Platform status and difficulty filters */}
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+              {/* Status Filter */}
+              <div className="flex gap-1 bg-black/40 p-1 rounded-xl border border-white/5 mr-1">
+                {(["All", "Solved", "Unsolved"] as const).map(status => {
+                  const count = status === "All" ? totalCount : status === "Solved" ? solvedCount : unsolvedCount;
+                  return (
+                    <button
+                      key={status}
+                      onClick={() => setStatusFilter(status)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold select-none transition-all flex items-center gap-1.5 ${
+                        statusFilter === status
+                          ? "bg-violet-600 text-white shadow-inner"
+                          : "text-zinc-500 hover:text-white"
+                      }`}
+                    >
+                      <span>{status}</span>
+                      <span className={`px-1.5 py-0.2 rounded-md text-[9px] font-bold ${
+                        statusFilter === status ? "bg-white/20 text-white" : "bg-white/[0.04] text-zinc-400"
+                      }`}>{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {(["Easy", "Medium", "Hard"] as const).map(diff => (
                 <button
                   key={diff}
-                  onClick={() => setDifficultyFilter(diff)}
+                  onClick={() => handleDifficultyClick(diff)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                     difficultyFilter === diff
                       ? "bg-violet-600/10 border-violet-500/30 text-violet-400"
