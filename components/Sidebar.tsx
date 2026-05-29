@@ -46,11 +46,13 @@ export default function Sidebar() {
     };
 
     window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("profile_updated", handleStorageChange);
     // Poll local changes briefly every few seconds to keep XP/streak live
     const interval = setInterval(handleStorageChange, 1500);
 
     return () => {
       window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("profile_updated", handleStorageChange);
       clearInterval(interval);
     };
   }, [user]);

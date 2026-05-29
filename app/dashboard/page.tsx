@@ -163,6 +163,19 @@ export default function Dashboard() {
 
         {/* Dash contents container */}
         <div className="p-8 space-y-8 max-w-6xl w-full mx-auto">
+          {/* Zero state motivational message */}
+          {totalSolves === 0 && (
+            <div className="p-5 rounded-2xl border border-violet-500/20 bg-gradient-to-r from-violet-600/10 via-fuchsia-600/5 to-transparent text-sm text-zinc-300 flex items-start gap-4 shadow-xl shadow-violet-600/5 animate-fadeIn">
+              <Sparkles className="h-6 w-6 text-violet-400 shrink-0 mt-0.5 animate-pulse" />
+              <div className="flex-1 space-y-1">
+                <strong className="font-bold text-white text-base block">Welcome to Your Technical Interview Prep Suite!</strong>
+                <p className="text-zinc-400 text-xs leading-relaxed font-medium">
+                  Your profile starts completely fresh. Start solving DSA problems, competitive programming questions, SQL queries, or logical quant brainteasers to track your progress metrics, secure active streaks, level up your rank, and gain Mastery XP Points!
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Top Overview Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {/* Day Streak */}
@@ -337,59 +350,73 @@ export default function Dashboard() {
                 Category Mastery Targets
               </h4>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {/* DSA */}
-                <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/[0.01] border border-white/5">
-                  <ProgressRing
-                    id="dsa"
-                    progress={dsaSolved / 15}
-                    size={80}
-                    strokeWidth={6}
-                    gradientColors={{ start: "#3b82f6", end: "#6366f1" }}
-                  />
-                  <span className="text-xs font-semibold text-white mt-3">DSA</span>
-                  <span className="text-[10px] text-zinc-500 mt-1">{dsaSolved}/15 Solved</span>
-                </div>
+              {(() => {
+                const getDynamicTarget = (solved: number, base: number) => {
+                  const multiplier = Math.floor(solved / base) + 1;
+                  return multiplier * base;
+                };
 
-                {/* CP */}
-                <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/[0.01] border border-white/5">
-                  <ProgressRing
-                    id="cp"
-                    progress={cpSolved / 15}
-                    size={80}
-                    strokeWidth={6}
-                    gradientColors={{ start: "#10b981", end: "#14b8a6" }}
-                  />
-                  <span className="text-xs font-semibold text-white mt-3">CP</span>
-                  <span className="text-[10px] text-zinc-500 mt-1">{cpSolved}/15 Solved</span>
-                </div>
+                const dsaTarget = getDynamicTarget(dsaSolved, 15);
+                const cpTarget = getDynamicTarget(cpSolved, 15);
+                const sqlTarget = getDynamicTarget(sqlSolved, 5);
+                const puzzlesTarget = getDynamicTarget(puzzlesSolved, 5);
 
-                {/* SQL */}
-                <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/[0.01] border border-white/5">
-                  <ProgressRing
-                    id="sql"
-                    progress={sqlSolved / 5} // Target of 5
-                    size={80}
-                    strokeWidth={6}
-                    gradientColors={{ start: "#8b5cf6", end: "#d946ef" }}
-                  />
-                  <span className="text-xs font-semibold text-white mt-3">SQL Practice</span>
-                  <span className="text-[10px] text-zinc-500 mt-1">{sqlSolved}/5 Solved</span>
-                </div>
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    {/* DSA */}
+                    <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/[0.01] border border-white/5 text-center">
+                      <ProgressRing
+                        id="dsa"
+                        progress={dsaSolved / dsaTarget}
+                        size={80}
+                        strokeWidth={6}
+                        gradientColors={{ start: "#3b82f6", end: "#6366f1" }}
+                      />
+                      <span className="text-xs font-semibold text-white mt-3">DSA</span>
+                      <span className="text-[10px] text-zinc-500 mt-1">{dsaSolved}/{dsaTarget} Solved</span>
+                    </div>
 
-                {/* Puzzles */}
-                <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/[0.01] border border-white/5">
-                  <ProgressRing
-                    id="puzzles"
-                    progress={puzzlesSolved / 5} // Target of 5
-                    size={80}
-                    strokeWidth={6}
-                    gradientColors={{ start: "#f97316", end: "#f59e0b" }}
-                  />
-                  <span className="text-xs font-semibold text-white mt-3">Puzzles</span>
-                  <span className="text-[10px] text-zinc-500 mt-1">{puzzlesSolved}/5 Solved</span>
-                </div>
-              </div>
+                    {/* CP */}
+                    <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/[0.01] border border-white/5 text-center">
+                      <ProgressRing
+                        id="cp"
+                        progress={cpSolved / cpTarget}
+                        size={80}
+                        strokeWidth={6}
+                        gradientColors={{ start: "#10b981", end: "#14b8a6" }}
+                      />
+                      <span className="text-xs font-semibold text-white mt-3">CP</span>
+                      <span className="text-[10px] text-zinc-500 mt-1">{cpSolved}/{cpTarget} Solved</span>
+                    </div>
+
+                    {/* SQL */}
+                    <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/[0.01] border border-white/5 text-center">
+                      <ProgressRing
+                        id="sql"
+                        progress={sqlSolved / sqlTarget}
+                        size={80}
+                        strokeWidth={6}
+                        gradientColors={{ start: "#8b5cf6", end: "#d946ef" }}
+                      />
+                      <span className="text-xs font-semibold text-white mt-3">SQL Practice</span>
+                      <span className="text-[10px] text-zinc-500 mt-1">{sqlSolved}/{sqlTarget} Solved</span>
+                    </div>
+
+                    {/* Puzzles */}
+                    <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/[0.01] border border-white/5 text-center">
+                      <ProgressRing
+                        id="puzzles"
+                        progress={puzzlesSolved / puzzlesTarget}
+                        size={80}
+                        strokeWidth={6}
+                        gradientColors={{ start: "#f97316", end: "#f59e0b" }}
+                      />
+                      <span className="text-xs font-semibold text-white mt-3">Puzzles</span>
+                      <span className="text-[10px] text-zinc-500 mt-1">{puzzlesSolved}/{puzzlesTarget} Solved</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

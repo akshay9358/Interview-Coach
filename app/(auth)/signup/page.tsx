@@ -81,6 +81,11 @@ export default function SignupPage() {
 
       {/* Card Wrapper */}
       <div className="w-full max-w-md p-8 rounded-3xl border border-white/10 bg-zinc-950/60 backdrop-blur-xl shadow-2xl relative z-10 mx-4">
+        {/* Back to Home arrow link */}
+        <Link href="/" className="absolute top-6 left-6 text-zinc-500 hover:text-zinc-300 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors select-none">
+          <span>← Home</span>
+        </Link>
+
         {/* Branding header */}
         <div className="flex flex-col items-center mb-8">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-violet-600 to-fuchsia-600 font-bold text-white shadow-lg shadow-violet-500/25 mb-4 text-xl">

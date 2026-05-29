@@ -5,6 +5,33 @@ import Link from "next/link";
 import { ArrowRight, Code2, Database, Puzzle, BarChart3, Terminal, Award, Sparkles } from "lucide-react";
 
 export default function LandingPage() {
+  const handleTryDemo = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (typeof window !== "undefined") {
+      // Log in as Guest
+      localStorage.setItem("ic_current_user", "Guest");
+      
+      const profilesRaw = localStorage.getItem("ic_profiles") || "{}";
+      const profiles = JSON.parse(profilesRaw);
+      
+      // Force reset Guest profile to be completely empty and fresh
+      profiles["Guest"] = {
+        username: "Guest",
+        streak: 0,
+        xp: 0,
+        solvedList: [],
+        solvedPuzzles: [],
+        solvedSql: [],
+        solvedCustomCount: 0,
+        activityLog: {},
+        timedSessions: []
+      };
+      localStorage.setItem("ic_profiles", JSON.stringify(profiles));
+      
+      window.location.href = "/dashboard";
+    }
+  };
+
   const features = [
     {
       title: "Data Structures & Algorithms",
@@ -85,12 +112,12 @@ export default function LandingPage() {
             <span>Start Practice Free</span>
             <ArrowRight className="h-5 w-5" />
           </Link>
-          <Link
-            href="/login"
-            className="w-full sm:w-auto px-8 py-4 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.05] text-zinc-300 hover:text-white font-semibold transition-all text-center"
+          <button
+            onClick={handleTryDemo}
+            className="w-full sm:w-auto px-8 py-4 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.05] text-zinc-300 hover:text-white font-semibold transition-all text-center cursor-pointer outline-none"
           >
             Try Demo Account
-          </Link>
+          </button>
         </div>
       </section>
 

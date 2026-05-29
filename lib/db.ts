@@ -108,14 +108,14 @@ const seedMockTimedSessions = (): TimedSession[] => {
 
 const DEFAULT_PROFILE: UserProfile = {
   username: "Guest",
-  streak: 5,
-  xp: 320,
-  solvedList: ["lc-two-sum", "cf-watermelon"], // Seed 2 solved problems initially
-  solvedPuzzles: ["9-balls-weight"], // Seed 1 solved puzzle
-  solvedSql: ["duplicate-emails"], // Seed 1 solved SQL
+  streak: 0,
+  xp: 0,
+  solvedList: [],
+  solvedPuzzles: [],
+  solvedSql: [],
   solvedCustomCount: 0,
-  activityLog: seedMockActivity(),
-  timedSessions: seedMockTimedSessions()
+  activityLog: {},
+  timedSessions: []
 };
 
 const STORAGE_KEYS = {
@@ -141,6 +141,86 @@ export function setLoggedInUser(username: string | null) {
   }
 }
 
+export function healUserProfile(profile: UserProfile): UserProfile {
+  // 1. Recalculate XP
+  const newXP = recalculateUserXP(profile);
+  profile.xp = newXP;
+
+  // 2. Reconcile activity log based on timed sessions
+  if (!profile.activityLog) {
+    profile.activityLog = {};
+  }
+  if (profile.timedSessions) {
+    profile.timedSessions.forEach(session => {
+      const dateStr = session.solvedAt;
+      if (dateStr) {
+        const sessionsOnDate = profile.timedSessions!.filter(s => s.solvedAt === dateStr).length;
+        if ((profile.activityLog[dateStr] || 0) < sessionsOnDate) {
+          profile.activityLog[dateStr] = sessionsOnDate;
+        }
+      }
+    });
+  }
+
+  // 2.5. Distribute un-dated solved items (puzzles, SQL) to active activityLog dates to perfectly align them with the heatmap!
+  if (profile.activityLog) {
+    const activeDates = Object.keys(profile.activityLog)
+      .filter(d => profile.activityLog[d] > 0)
+      .sort((a, b) => b.localeCompare(a)); // Sort descending (latest dates first)
+      
+    if (activeDates.length > 0) {
+      // Build a map of dates and their target capacity (from activityLog)
+      const dateCapacities: Record<string, { total: number; allocated: number }> = {};
+      activeDates.forEach(d => {
+        dateCapacities[d] = { total: profile.activityLog[d], allocated: 0 };
+      });
+
+      // Account for timed sessions first (they have hardcoded fixed dates)
+      if (profile.timedSessions) {
+        profile.timedSessions.forEach(session => {
+          if (dateCapacities[session.solvedAt]) {
+            dateCapacities[session.solvedAt].allocated++;
+          }
+        });
+      }
+
+      // Gather all solved puzzles and SQL problems
+      const itemsToAllocate: { id: string; type: "puzzle" | "sql" }[] = [];
+      profile.solvedPuzzles.forEach(id => {
+        itemsToAllocate.push({ id, type: "puzzle" });
+      });
+      profile.solvedSql.forEach(id => {
+        itemsToAllocate.push({ id, type: "sql" });
+      });
+
+      // Allocate items to dates that still have remaining capacity
+      itemsToAllocate.forEach(item => {
+        // Find a date with remaining capacity
+        let targetDate = activeDates.find(d => dateCapacities[d].allocated < dateCapacities[d].total);
+        
+        // Fallback: if all capacities are filled, assign to the date with the highest total capacity
+        if (!targetDate) {
+          targetDate = activeDates[0];
+        }
+
+        // Assign the date
+        if (item.type === "puzzle") {
+          if (!profile.solvedPuzzleAnswers) profile.solvedPuzzleAnswers = {};
+          profile.solvedPuzzleAnswers[item.id + "_date"] = targetDate;
+        } else {
+          if (!profile.solvedSqlAnswers) profile.solvedSqlAnswers = {};
+          profile.solvedSqlAnswers[item.id + "_date"] = targetDate;
+        }
+        
+        dateCapacities[targetDate].allocated++;
+      });
+    }
+  }
+
+  // 3. Re-calculate streak
+  return calculateStreak(profile);
+}
+
 /**
  * Returns user profile instantly from memory or local cache,
  * then triggers a background fetch to Supabase to update / migrate data if cloud mode is enabled.
@@ -161,21 +241,36 @@ export function getUserProfile(username: string): UserProfile {
     localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(profiles));
   }
 
-  // Seed cache
-  cachedProfiles[username] = profiles[username];
+  // Heal profile on initial load
+  const profile = profiles[username];
+  const originalXP = profile.xp;
+  const originalLogJson = JSON.stringify(profile.activityLog || {});
+  
+  const healed = healUserProfile(profile);
+  const healedLogJson = JSON.stringify(healed.activityLog || {});
 
-  // Trigger background cloud sync/migration
-  if (supabase) {
-    syncWithSupabase(username, profiles[username]);
+  if (originalXP !== healed.xp || originalLogJson !== healedLogJson) {
+    console.log(`Healed local profile for ${username}: XP ${originalXP} -> ${healed.xp}`);
+    profiles[username] = healed;
+    localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(profiles));
   }
 
-  return profiles[username];
+  // Seed cache
+  cachedProfiles[username] = healed;
+
+  // Trigger background cloud sync/migration (bypass for Guest to keep it purely local)
+  if (supabase && username.toLowerCase() !== "guest") {
+    syncWithSupabase(username, healed);
+  }
+
+  return healed;
 }
 
 /**
  * Handles the bidirectional background synchronization and migration with Supabase.
  */
 async function syncWithSupabase(username: string, localProfile: UserProfile) {
+  if (username.toLowerCase() === "guest") return;
   try {
     const { data: cloudProfile, error } = await supabase!
       .from("profiles")
@@ -193,41 +288,44 @@ async function syncWithSupabase(username: string, localProfile: UserProfile) {
       console.log(`Migrating/Pushing profile for "${username}" to Supabase cloud...`);
       await pushProfileToSupabase(localProfile);
     } else {
-      // 2. BIDIRECTIONAL SYNC: Compare progress metrics (XP decides which database has newer/more progress)
+      // 2. BIDIRECTIONAL SYNC: Compare progress metrics
       const cloudXP = cloudProfile.xp || 0;
       const localXP = localProfile.xp || 0;
 
-      if (localXP > cloudXP) {
-        // Local has more solved progress (perhaps solved offline). Push/update cloud.
-        console.log(`Syncing up: Local has more XP (${localXP} > ${cloudXP}). Updating Supabase...`);
-        await pushProfileToSupabase(localProfile);
-      } else if (cloudXP > localXP) {
-        // Cloud has more solved progress (perhaps solved on another device). Pull down.
-        console.log(`Syncing down: Supabase has more XP (${cloudXP} > ${localXP}). Overwriting local storage...`);
+      // Always heal the cloud profile metrics first to compare correctly
+      const pulledProfile: UserProfile = {
+        username: cloudProfile.username,
+        cfHandle: cloudProfile.cf_handle,
+        lcHandle: cloudProfile.lc_handle,
+        streak: cloudProfile.streak,
+        lastActiveDate: cloudProfile.last_active_date,
+        xp: cloudProfile.xp,
+        solvedList: cloudProfile.solved_list || [],
+        solvedPuzzles: cloudProfile.solved_puzzles || [],
+        solvedSql: cloudProfile.solved_sql || [],
+        solvedCustomCount: cloudProfile.solved_custom_count || 0,
+        solvedPuzzleAnswers: cloudProfile.solved_puzzle_answers || {},
+        solvedSqlAnswers: cloudProfile.solved_sql_answers || {},
+        activityLog: cloudProfile.activity_log || {},
+        timedSessions: cloudProfile.timed_sessions || []
+      };
 
-        const pulledProfile: UserProfile = {
-          username: cloudProfile.username,
-          cfHandle: cloudProfile.cf_handle,
-          lcHandle: cloudProfile.lc_handle,
-          streak: cloudProfile.streak,
-          lastActiveDate: cloudProfile.last_active_date,
-          xp: cloudProfile.xp,
-          solvedList: cloudProfile.solved_list || [],
-          solvedPuzzles: cloudProfile.solved_puzzles || [],
-          solvedSql: cloudProfile.solved_sql || [],
-          solvedCustomCount: cloudProfile.solved_custom_count || 0,
-          solvedPuzzleAnswers: cloudProfile.solved_puzzle_answers || {},
-          solvedSqlAnswers: cloudProfile.solved_sql_answers || {},
-          activityLog: cloudProfile.activity_log || {},
-          timedSessions: cloudProfile.timed_sessions || []
-        };
+      const healedPulled = healUserProfile(pulledProfile);
+
+      if (localXP > healedPulled.xp) {
+        // Local has more solved progress (perhaps solved offline). Push/update cloud.
+        console.log(`Syncing up: Local has more XP (${localXP} > ${healedPulled.xp}). Updating Supabase...`);
+        await pushProfileToSupabase(localProfile);
+      } else if (healedPulled.xp > localXP) {
+        // Cloud has more solved progress. Pull down.
+        console.log(`Syncing down: Supabase has more XP (${healedPulled.xp} > ${localXP}). Overwriting local storage...`);
 
         // Update local storage and cache
         const profilesRaw = localStorage.getItem(STORAGE_KEYS.PROFILES);
         const profiles = profilesRaw ? JSON.parse(profilesRaw) : {};
-        profiles[username] = pulledProfile;
+        profiles[username] = healedPulled;
         localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(profiles));
-        cachedProfiles[username] = pulledProfile;
+        cachedProfiles[username] = healedPulled;
 
         // Sync password from cloud to local credentials DB
         if (cloudProfile.password) {
@@ -237,10 +335,20 @@ async function syncWithSupabase(username: string, localProfile: UserProfile) {
           localStorage.setItem("ic_users_db", JSON.stringify(users));
         }
 
+        // If healed version of cloud differs from cloud itself, push the healed one back up
+        if (healedPulled.xp !== cloudProfile.xp || JSON.stringify(healedPulled.activityLog) !== JSON.stringify(cloudProfile.activity_log || {})) {
+          await pushProfileToSupabase(healedPulled);
+        }
+
         // Dispatch a custom event to notify React components to re-render
         window.dispatchEvent(new Event("profile_updated"));
       } else {
-        // XP is equal, check if we need to sync password to cloud or update handles
+        // XP is equal, check if cloud needs healing or we need to sync password / update handles
+        if (healedPulled.xp !== cloudProfile.xp || JSON.stringify(healedPulled.activityLog) !== JSON.stringify(cloudProfile.activity_log || {})) {
+          console.log("Healed version of cloud profile differs. Syncing healed profile back to Supabase...");
+          await pushProfileToSupabase(healedPulled);
+        }
+
         const usersRaw = localStorage.getItem("ic_users_db") || "{}";
         const users = JSON.parse(usersRaw);
         const localPassword = users[username.toLowerCase()];
@@ -321,8 +429,8 @@ export function saveUserProfile(profile: UserProfile) {
   profiles[profile.username] = updatedProfile;
   localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(profiles));
 
-  // Background push to Supabase Cloud
-  if (supabase) {
+  // Background push to Supabase Cloud (bypass for Guest)
+  if (supabase && profile.username.toLowerCase() !== "guest") {
     pushProfileToSupabase(updatedProfile);
   }
 }
@@ -396,8 +504,12 @@ export function recordSolve(
       profile.xp += getXPByDifficulty(resolvedDiff);
       isNewSolve = true;
     }
+    if (!profile.solvedPuzzleAnswers) profile.solvedPuzzleAnswers = {};
+    if (!profile.solvedPuzzleAnswers[itemId + "_date"]) {
+      profile.solvedPuzzleAnswers[itemId + "_date"] = todayStr;
+      isNewSolve = true;
+    }
     if (answer) {
-      if (!profile.solvedPuzzleAnswers) profile.solvedPuzzleAnswers = {};
       profile.solvedPuzzleAnswers[itemId] = answer;
       isNewSolve = true; // force save/update
     }
@@ -413,8 +525,12 @@ export function recordSolve(
       profile.xp += getXPByDifficulty(resolvedDiff);
       isNewSolve = true;
     }
+    if (!profile.solvedSqlAnswers) profile.solvedSqlAnswers = {};
+    if (!profile.solvedSqlAnswers[itemId + "_date"]) {
+      profile.solvedSqlAnswers[itemId + "_date"] = todayStr;
+      isNewSolve = true;
+    }
     if (answer) {
-      if (!profile.solvedSqlAnswers) profile.solvedSqlAnswers = {};
       profile.solvedSqlAnswers[itemId] = answer;
       isNewSolve = true; // force save/update
     }
@@ -471,7 +587,7 @@ export function recordTimedSession(
 }
 
 /**
- * Calculates current active streak based on consecutive daily activities.
+ * Calculates current active streak based on consecutive daily activities (timezone safe).
  */
 function calculateStreak(profile: UserProfile): UserProfile {
   const activityLog = profile.activityLog || {};
@@ -482,31 +598,38 @@ function calculateStreak(profile: UserProfile): UserProfile {
     return profile;
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const todayStr = getLocalTodayStr();
+  const yesterdayStr = (() => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const year = yesterday.getFullYear();
+    const month = String(yesterday.getMonth() + 1).padStart(2, "0");
+    const day = String(yesterday.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  })();
 
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-
-  const todayStr = today.toISOString().split("T")[0];
-  const yesterdayStr = yesterday.toISOString().split("T")[0];
-
-  const hasSolvedRecently = activityLog[todayStr] > 0 || activityLog[yesterdayStr] > 0;
+  const hasSolvedRecently = (activityLog[todayStr] || 0) > 0 || (activityLog[yesterdayStr] || 0) > 0;
   if (!hasSolvedRecently) {
     profile.streak = 0;
     return profile;
   }
 
   let streak = 0;
-  let currentCheck = new Date(today);
+  let currentCheck = new Date();
 
-  if (!(activityLog[todayStr] > 0)) {
-    currentCheck = new Date(yesterday);
+  if (!((activityLog[todayStr] || 0) > 0)) {
+    currentCheck.setDate(currentCheck.getDate() - 1);
   }
 
   while (true) {
-    const checkStr = currentCheck.toISOString().split("T")[0];
-    if (activityLog[checkStr] > 0) {
+    const checkStr = (() => {
+      const year = currentCheck.getFullYear();
+      const month = String(currentCheck.getMonth() + 1).padStart(2, "0");
+      const day = String(currentCheck.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    })();
+
+    if ((activityLog[checkStr] || 0) > 0) {
       streak++;
       currentCheck.setDate(currentCheck.getDate() - 1); // move back 1 day
     } else {
@@ -518,3 +641,81 @@ function calculateStreak(profile: UserProfile): UserProfile {
   profile.lastActiveDate = dates[dates.length - 1];
   return profile;
 }
+
+/**
+ * Recalculates total XP for a user profile dynamically to scale it down to the new difficulty rules
+ */
+export function recalculateUserXP(profile: UserProfile): number {
+  let newXP = 0;
+
+  // 1. Standard solved list (LeetCode / Codeforces)
+  profile.solvedList.forEach(itemId => {
+    const matched = standardProblems.find(p => p.id === itemId);
+    let diff: "Easy" | "Medium" | "Hard" = "Medium";
+    if (matched) {
+      diff = matched.difficulty;
+    } else if (itemId.startsWith("cf-")) {
+      const parts = itemId.split("-");
+      const index = parts[parts.length - 1]?.toUpperCase() || "";
+      if (["A", "B"].includes(index.charAt(0))) diff = "Easy";
+      else if (["C", "D"].includes(index.charAt(0))) diff = "Medium";
+      else diff = "Hard";
+    }
+    newXP += getXPByDifficulty(diff);
+  });
+
+  // 2. SQL solves
+  profile.solvedSql.forEach(itemId => {
+    let diff: "Easy" | "Medium" | "Hard" = "Medium";
+    if (itemId.includes("hard") || itemId.includes("department-top")) diff = "Hard";
+    else if (itemId.includes("easy") || itemId.includes("duplicate")) diff = "Easy";
+    newXP += getXPByDifficulty(diff);
+  });
+
+  // 3. Puzzle solves
+  profile.solvedPuzzles.forEach(itemId => {
+    let diff: "Easy" | "Medium" | "Hard" = "Medium";
+    if (itemId.includes("weight") || itemId.includes("matchstick")) diff = "Medium";
+    else if (itemId.includes("hard") || itemId.includes("chess")) diff = "Hard";
+    else diff = "Easy";
+    newXP += getXPByDifficulty(diff);
+  });
+
+  // 4. Custom solves
+  newXP += profile.solvedCustomCount * getXPByDifficulty("Medium");
+
+  // 5. Timed sessions
+  if (profile.timedSessions) {
+    profile.timedSessions.forEach(session => {
+      newXP += getXPByDifficulty(session.difficulty || "Medium");
+    });
+  }
+
+  return newXP;
+}
+
+/**
+ * Returns the date when a given SQL or Puzzle was solved.
+ */
+export function getSolvedDate(profile: UserProfile, itemId: string, type: "puzzle" | "sql"): string {
+  if (type === "puzzle") {
+    if (profile.solvedPuzzleAnswers?.[itemId + "_date"]) {
+      return profile.solvedPuzzleAnswers[itemId + "_date"];
+    }
+  } else {
+    if (profile.solvedSqlAnswers?.[itemId + "_date"]) {
+      return profile.solvedSqlAnswers[itemId + "_date"];
+    }
+  }
+
+  // Fallback to matching timed sessions
+  if (profile.timedSessions) {
+    const session = profile.timedSessions.find(s => s.linkOrId === itemId);
+    if (session?.solvedAt) {
+      return session.solvedAt;
+    }
+  }
+
+  return "2026-05-28"; // Default date
+}
+

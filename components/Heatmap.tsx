@@ -14,18 +14,19 @@ export default function Heatmap({ activityLog }: HeatmapProps) {
     visible: boolean;
   }>({ text: "", x: 0, y: 0, visible: false });
 
-  // Generate calendar grid for the last 53 weeks (371 days) leading up to today
+  // Generate calendar grid for the last 53 weeks (371 days) ending exactly on this week's Saturday
   const calendarGrid = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    // Find the starting date: 371 days ago (53 weeks * 7 days)
-    const startDate = new Date(today);
-    startDate.setDate(today.getDate() - 370);
+    // Find the end date: Saturday of this week
+    const endDate = new Date(today);
+    const endDay = endDate.getDay();
+    endDate.setDate(today.getDate() + (6 - endDay)); // Shift forward to Saturday
     
-    // Adjust startDate to be the beginning of the week (Sunday = 0, Monday = 1, etc.)
-    const startDay = startDate.getDay();
-    startDate.setDate(startDate.getDate() - startDay); // Shift back to Sunday of that week
+    // Find the starting date: exactly 371 days (53 weeks * 7 days) before Saturday (which will be a Sunday)
+    const startDate = new Date(endDate);
+    startDate.setDate(endDate.getDate() - 370);
 
     const toLocalYYYYMMDD = (d: Date) => {
       const year = d.getFullYear();

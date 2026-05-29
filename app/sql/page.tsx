@@ -21,7 +21,8 @@ import {
   getLoggedInUser, 
   getUserProfile, 
   recordSolve, 
-  UserProfile 
+  UserProfile,
+  getSolvedDate
 } from "@/lib/db";
 import { sqlProblems, SqlProblem, generateDynamicSqlProblem } from "@/lib/sqlPracticeData";
 
@@ -701,271 +702,270 @@ export default function SqlPractice() {
         </header>
 
         {/* Console view layout */}
-        <div className="p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 max-w-7xl w-full mx-auto">
+        <div className="p-8 flex flex-col gap-6 max-w-4xl w-full mx-auto">
           
-          {/* Left panel: Problem descriptions & table schemas (col-span-5) */}
-          <div className="lg:col-span-5 space-y-6">
+          {/* 1. SELECT SQL PROBLEM scrollable select list */}
+          <div className="p-5 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-3">Select SQL Problem</label>
             
-            {/* Problems dropdown select list */}
-            <div className="p-5 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm">
-              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-2">Select SQL Problem</label>
-              <div className="space-y-1 max-h-[380px] overflow-y-auto pr-1">
-                {/* Unsolved SQL problems */}
-                {displayProblems.filter(prob => !profile.solvedSql.includes(prob.id)).map((prob) => {
-                  const isActive = activeProblem.id === prob.id;
-                  return (
-                    <button
-                      key={prob.id}
-                      onClick={() => handleSelectProblem(prob)}
-                      className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex justify-between items-center transition-all ${
-                        isActive
-                          ? "bg-violet-600/20 text-violet-300 border border-violet-500/20 shadow-inner"
-                          : "text-zinc-400 hover:text-white hover:bg-white/[0.02]"
-                      }`}
-                    >
-                      <span className="truncate pr-2">{prob.title}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[8px] border shrink-0 ${
-                        prob.difficulty === "Easy" ? "border-emerald-500/20 text-emerald-400 bg-emerald-500/5" :
-                        prob.difficulty === "Medium" ? "border-amber-500/20 text-amber-400 bg-amber-500/5" :
-                        "border-rose-500/20 text-rose-400 bg-rose-500/5"
-                      }`}>
-                        {prob.difficulty}
-                      </span>
-                    </button>
-                  );
-                })}
+            {/* Scrollable list of all problems (shows ~5 items, scroll to see more) */}
+            <div className="space-y-1.5 max-h-[200px] overflow-y-auto pr-1">
+              {/* Unsolved SQL problems */}
+              {displayProblems.filter(prob => !profile.solvedSql.includes(prob.id)).map((prob) => {
+                const isActive = activeProblem.id === prob.id;
+                return (
+                  <button
+                    key={prob.id}
+                    onClick={() => handleSelectProblem(prob)}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex justify-between items-center transition-all ${
+                      isActive
+                        ? "bg-violet-600/20 text-violet-300 border border-violet-500/20 shadow-inner"
+                        : "text-zinc-400 hover:text-white hover:bg-white/[0.02]"
+                    }`}
+                  >
+                    <span className="truncate pr-2">{prob.title}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[8px] border shrink-0 ${
+                      prob.difficulty === "Easy" ? "border-emerald-500/20 text-emerald-400 bg-emerald-500/5" :
+                      prob.difficulty === "Medium" ? "border-amber-500/20 text-amber-400 bg-amber-500/5" :
+                      "border-rose-500/20 text-rose-400 bg-rose-500/5"
+                    }`}>
+                      {prob.difficulty}
+                    </span>
+                  </button>
+                );
+              })}
 
-                {/* Collapsible Solved SQL Dropdown */}
-                {displayProblems.filter(prob => profile.solvedSql.includes(prob.id)).length > 0 && (
-                  <div className="mt-3 border-t border-white/5 pt-2">
-                    <button
-                      onClick={() => setShowSolvedSql(!showSolvedSql)}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold text-zinc-500 hover:text-zinc-300 transition-colors select-none outline-none"
-                    >
-                      <span>Solved Queries ({displayProblems.filter(prob => profile.solvedSql.includes(prob.id)).length})</span>
-                      {showSolvedSql ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    </button>
+              {/* Collapsible Solved SQL Dropdown */}
+              {displayProblems.filter(prob => profile.solvedSql.includes(prob.id)).length > 0 && (
+                <div className="mt-3 border-t border-white/5 pt-2">
+                  <button
+                    onClick={() => setShowSolvedSql(!showSolvedSql)}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold text-zinc-500 hover:text-zinc-300 transition-colors select-none outline-none"
+                  >
+                    <span>Solved Queries ({displayProblems.filter(prob => profile.solvedSql.includes(prob.id)).length})</span>
+                    {showSolvedSql ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </button>
 
-                    {showSolvedSql && (
-                      <div className="mt-1 space-y-1 pl-1 animate-fadeIn">
-                        {displayProblems.filter(prob => profile.solvedSql.includes(prob.id)).map((prob) => {
-                          const isActive = activeProblem.id === prob.id;
-                          return (
-                            <button
-                              key={prob.id}
-                              onClick={() => handleSelectProblem(prob)}
-                              className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex justify-between items-center transition-all ${
-                                isActive
-                                  ? "bg-violet-600/20 text-violet-300 border border-violet-500/20 shadow-inner"
-                                  : "text-zinc-500 hover:text-white hover:bg-white/[0.01]"
-                              }`}
-                            >
+                  {showSolvedSql && (
+                    <div className="mt-1 space-y-1.5 pl-1 animate-fadeIn max-h-[160px] overflow-y-auto pr-1">
+                      {displayProblems.filter(prob => profile.solvedSql.includes(prob.id)).map((prob) => {
+                        const isActive = activeProblem.id === prob.id;
+                        return (
+                          <button
+                            key={prob.id}
+                            onClick={() => handleSelectProblem(prob)}
+                            className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex justify-between items-center transition-all ${
+                              isActive
+                                ? "bg-violet-600/20 text-violet-300 border border-violet-500/20 shadow-inner"
+                                : "text-zinc-500 hover:text-white hover:bg-white/[0.01]"
+                            }`}
+                          >
+                            <div className="flex flex-col min-w-0 flex-1">
                               <span className="truncate pr-2 line-through text-zinc-600">{prob.title}</span>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <span className={`px-1.5 py-0.5 rounded text-[8px] border ${
-                                  prob.difficulty === "Easy" ? "border-emerald-500/20 text-emerald-400 bg-emerald-500/5" :
-                                  prob.difficulty === "Medium" ? "border-amber-500/20 text-amber-400 bg-amber-500/5" :
-                                  "border-rose-500/20 text-rose-400 bg-rose-500/5"
-                                }`}>
-                                  {prob.difficulty}
-                                </span>
-                                <Check className="h-4 w-4 text-emerald-400 shrink-0" />
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Selected problem description */}
-            <div className="p-6 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm space-y-4">
-              <h3 className="text-md font-bold text-white flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-violet-400" />
-                Problem Statement
-              </h3>
-              <p className="text-xs text-zinc-400 leading-relaxed font-medium">
-                {activeProblem.description}
-              </p>
-
-              {/* Table Schema Viewer */}
-              <div className="pt-4 border-t border-white/5">
-                <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                  <Database className="h-3.5 w-3.5 text-zinc-500" />
-                  Active Database Tables
-                </h4>
-                <div className="space-y-4">
-                  {activeProblem.tables.map((table, tIdx) => (
-                    <div key={tIdx} className="bg-black/40 border border-white/5 p-3.5 rounded-xl">
-                      <span className="text-xs font-bold text-white">{table.name}</span>
-                      <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-white/5 text-[10px]">
-                        {table.columns.map((col, cIdx) => (
-                          <div key={cIdx} className="flex justify-between text-zinc-500">
-                            <strong className="text-zinc-300 font-semibold">{col.name}</strong>
-                            <span className="uppercase">{col.type}</span>
-                          </div>
-                        ))}
-                      </div>
+                              <span className="text-[9px] text-zinc-500 font-normal mt-0.5">
+                                Solved on {getSolvedDate(profile, prob.id, "sql")}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className={`px-1.5 py-0.5 rounded text-[8px] border font-semibold ${
+                                prob.difficulty === "Easy" ? "border-emerald-500/20 text-emerald-400 bg-emerald-500/5" :
+                                prob.difficulty === "Medium" ? "border-amber-500/20 text-amber-400 bg-amber-500/5" :
+                                "border-rose-500/20 text-rose-400 bg-rose-500/5"
+                              }`}>
+                                {prob.difficulty}
+                              </span>
+                              <Check className="h-4 w-4 text-emerald-400 shrink-0" />
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Expected Output Viewer */}
-              {expectedOutput && (
-                <div className="pt-4 border-t border-white/5">
-                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                    <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
-                    Expected Output Table
-                  </h4>
-                  <div className="bg-black/40 border border-white/5 rounded-xl overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-[10px]">
-                        <thead>
-                          <tr className="border-b border-white/5 bg-white/[0.02]">
-                            {expectedOutput.columns.map((col, idx) => (
-                              <th key={idx} className="p-2 font-bold text-zinc-300 uppercase tracking-wider">
-                                {col}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {expectedOutput.values.map((row, rIdx) => (
-                            <tr key={rIdx} className="border-b border-white/[0.02] last:border-0 hover:bg-white/[0.01]">
-                              {row.map((val, cIdx) => (
-                                <td key={cIdx} className="p-2 text-zinc-400 font-mono">
-                                  {val === null || val === undefined ? "NULL" : String(val)}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
-
-              {/* Hint Box (Collapsible Toggle) */}
-              <div className="pt-4 border-t border-white/5 space-y-2">
-                <button
-                  onClick={() => setShowSqlHint(!showSqlHint)}
-                  className="flex items-center justify-between w-full text-xs font-bold text-zinc-500 hover:text-zinc-300 transition-colors py-1 select-none outline-none"
-                >
-                  <span>HELPFUL HINT</span>
-                  {showSqlHint ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                </button>
-                {showSqlHint && (
-                  <p className="text-[11px] text-zinc-400 leading-relaxed font-medium bg-black/30 border border-white/5 p-3 rounded-xl animate-fadeIn">
-                    {activeProblem.hint}
-                  </p>
-                )}
-              </div>
             </div>
           </div>
 
-          {/* Right panel: SQL Live code terminal & tabular visualizer (col-span-7) */}
-          <div className="lg:col-span-7 space-y-6">
-            
-            {/* Editor Terminal */}
-            <div className="p-5 rounded-2xl border border-white/5 bg-zinc-950 flex flex-col shadow-2xl relative">
-              <div className="flex justify-between items-center mb-4 text-xs font-semibold text-zinc-500">
-                <span>SQL Practice Console</span>
-                <span className="text-[10px] text-violet-400">PostgreSQL / SQLite dialect</span>
-              </div>
+          {/* 2. Problem Statement & Table Schema Details Card */}
+          <div className="p-6 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm space-y-4">
+            <h3 className="text-md font-bold text-white flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-violet-400" />
+              Problem Statement
+            </h3>
+            <p className="text-xs text-zinc-400 leading-relaxed font-medium">
+              {activeProblem.description}
+            </p>
 
-              {/* Code TextArea */}
-              <textarea
-                value={userQuery}
-                onChange={(e) => setUserQuery(e.target.value)}
-                className="w-full h-64 bg-black/60 border border-white/5 rounded-xl p-4 text-xs font-mono text-zinc-200 focus:outline-none focus:border-violet-500 resize-none leading-relaxed"
-                spellCheck={false}
-              />
-
-              {/* CTA buttons */}
-              <div className="flex gap-3 justify-end mt-4">
-                <button
-                  onClick={handleRunQuery}
-                  disabled={loading || !sqlReady}
-                  className="px-4 py-2.5 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] text-xs font-semibold text-zinc-300 hover:text-white flex items-center gap-1.5 transition-all select-none disabled:opacity-50"
-                >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin text-zinc-400" /> : <Play className="h-3.5 w-3.5 fill-current" />}
-                  <span>Run Query</span>
-                </button>
-
-                <button
-                  onClick={handleSubmitQuery}
-                  disabled={loading || !sqlReady}
-                  className="px-4 py-2.5 rounded-xl bg-violet-600/90 hover:bg-violet-500 text-xs font-semibold text-white flex items-center gap-1.5 transition-all shadow-lg shadow-violet-600/10 select-none disabled:opacity-50"
-                >
-                  <CheckSquare className="h-3.5 w-3.5" />
-                  <span>Submit Code</span>
-                </button>
+            {/* Table Schema Viewer */}
+            <div className="pt-4 border-t border-white/5">
+              <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                <Database className="h-3.5 w-3.5 text-zinc-500" />
+                Active Database Tables
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {activeProblem.tables.map((table, tIdx) => (
+                  <div key={tIdx} className="bg-black/40 border border-white/5 p-3.5 rounded-xl">
+                    <span className="text-xs font-bold text-white">{table.name}</span>
+                    <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-white/5 text-[10px]">
+                      {table.columns.map((col, cIdx) => (
+                        <div key={cIdx} className="flex justify-between text-zinc-500">
+                          <strong className="text-zinc-300 font-semibold">{col.name}</strong>
+                          <span className="uppercase">{col.type}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Error notifications */}
-            {sqlError && (
-              <div className="flex items-start gap-3 p-4 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-xs animate-fadeIn">
-                <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
-                <span className="font-mono leading-relaxed">{sqlError}</span>
-              </div>
-            )}
-
-            {/* Success/Failure submission states */}
-            {submitStatus && (
-              <div className={`p-4 rounded-xl border text-xs flex items-center gap-2.5 animate-fadeIn ${
-                submitStatus.success
-                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                  : "border-red-500/20 bg-red-500/10 text-red-400"
-              }`}>
-                {submitStatus.success ? <Check className="h-5 w-5 shrink-0" /> : <AlertCircle className="h-5 w-5 shrink-0" />}
-                <div className="flex-1">
-                  <strong className="font-bold block mb-0.5">{submitStatus.success ? "Accepted!" : "Wrong Answer"}</strong>
-                  <span className="font-medium text-zinc-400">{submitStatus.text}</span>
-                </div>
-                {submitStatus.success && (
-                  <span className="text-[10px] bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-md font-bold flex items-center gap-0.5 shrink-0 text-emerald-400">
-                    <Award className="h-3 w-3 fill-current" />
-                    <span>+25 XP</span>
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* Tabular Output viewer */}
-            {queryResult && (
-              <div className="p-5 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm space-y-3 max-h-96 overflow-y-auto">
-                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Query Result Table</span>
-                <div className="overflow-x-auto border border-white/5 rounded-xl bg-black/40">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-white/[0.02] border-b border-white/5 text-zinc-400 font-semibold select-none">
-                        {queryResult.columns.map((col, idx) => (
-                          <th key={idx} className="p-3 font-semibold uppercase tracking-wider">{col}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {queryResult.values.map((row, rIdx) => (
-                        <tr key={rIdx} className="border-b border-white/[0.02] hover:bg-white/[0.01] transition-all">
-                          {row.map((val, cIdx) => (
-                            <td key={cIdx} className="p-3 text-zinc-300 font-medium font-mono">
-                              {val === null || val === undefined ? "NULL" : val.toString()}
-                            </td>
+            {/* Expected Output Viewer */}
+            {expectedOutput && (
+              <div className="pt-4 border-t border-white/5">
+                <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
+                  Expected Output Table
+                </h4>
+                <div className="bg-black/40 border border-white/5 rounded-xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-[10px]">
+                      <thead>
+                        <tr className="border-b border-white/5 bg-white/[0.02]">
+                          {expectedOutput.columns.map((col, idx) => (
+                            <th key={idx} className="p-2 font-bold text-zinc-300 uppercase tracking-wider">
+                              {col}
+                            </th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {expectedOutput.values.map((row, rIdx) => (
+                          <tr key={rIdx} className="border-b border-white/[0.02] last:border-0 hover:bg-white/[0.01]">
+                            {row.map((val, cIdx) => (
+                              <td key={cIdx} className="p-2 text-zinc-400 font-mono">
+                                {val === null || val === undefined ? "NULL" : String(val)}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
+
+            {/* Hint Box (Collapsible Toggle) */}
+            <div className="pt-4 border-t border-white/5 space-y-2">
+              <button
+                onClick={() => setShowSqlHint(!showSqlHint)}
+                className="flex items-center justify-between w-full text-xs font-bold text-zinc-500 hover:text-zinc-300 transition-colors py-1 select-none outline-none"
+              >
+                <span>HELPFUL HINT</span>
+                {showSqlHint ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </button>
+              {showSqlHint && (
+                <p className="text-[11px] text-zinc-400 leading-relaxed font-medium bg-black/30 border border-white/5 p-3 rounded-xl animate-fadeIn">
+                  {activeProblem.hint}
+                </p>
+              )}
+            </div>
           </div>
+
+          {/* 3. SQL Code Editor Terminal */}
+          <div className="p-5 rounded-2xl border border-white/5 bg-zinc-950 flex flex-col shadow-2xl relative">
+            <div className="flex justify-between items-center mb-4 text-xs font-semibold text-zinc-500">
+              <span>SQL Practice Console</span>
+              <span className="text-[10px] text-violet-400">PostgreSQL / SQLite dialect</span>
+            </div>
+
+            {/* Code TextArea */}
+            <textarea
+              value={userQuery}
+              onChange={(e) => setUserQuery(e.target.value)}
+              className="w-full h-64 bg-black/60 border border-white/5 rounded-xl p-4 text-xs font-mono text-zinc-200 focus:outline-none focus:border-violet-500 resize-none leading-relaxed"
+              spellCheck={false}
+            />
+
+            {/* CTA buttons */}
+            <div className="flex gap-3 justify-end mt-4">
+              <button
+                onClick={handleRunQuery}
+                disabled={loading || !sqlReady}
+                className="px-4 py-2.5 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] text-xs font-semibold text-zinc-300 hover:text-white flex items-center gap-1.5 transition-all select-none disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin text-zinc-400" /> : <Play className="h-3.5 w-3.5 fill-current" />}
+                <span>Run Query</span>
+              </button>
+
+              <button
+                onClick={handleSubmitQuery}
+                disabled={loading || !sqlReady}
+                className="px-4 py-2.5 rounded-xl bg-violet-600/90 hover:bg-violet-500 text-xs font-semibold text-white flex items-center gap-1.5 transition-all shadow-lg shadow-violet-600/10 select-none disabled:opacity-50"
+              >
+                <CheckSquare className="h-3.5 w-3.5" />
+                <span>Submit Code</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 4. Error notifications */}
+          {sqlError && (
+            <div className="flex items-start gap-3 p-4 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-xs animate-fadeIn">
+              <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
+              <span className="font-mono leading-relaxed">{sqlError}</span>
+            </div>
+          )}
+
+          {/* 5. Success/Failure submission states (Accepted / Wrong Answer Banner) */}
+          {submitStatus && (
+            <div className={`p-4 rounded-xl border text-xs flex items-center gap-2.5 animate-fadeIn ${
+              submitStatus.success
+                ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-400 shadow-lg shadow-emerald-500/5"
+                : "border-red-500/20 bg-red-500/5 text-red-400 shadow-lg shadow-red-500/5"
+            }`}>
+              {submitStatus.success ? <Check className="h-5 w-5 shrink-0" /> : <AlertCircle className="h-5 w-5 shrink-0" />}
+              <div className="flex-1">
+                <strong className="font-bold block mb-0.5">{submitStatus.success ? "Accepted!" : "Wrong Answer"}</strong>
+                <span className="font-medium text-zinc-400">{submitStatus.text}</span>
+              </div>
+              {submitStatus.success && (
+                <span className="text-[10px] bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-md font-bold flex items-center gap-0.5 shrink-0 text-emerald-400">
+                  <Award className="h-3 w-3 fill-current" />
+                  <span>+25 XP</span>
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* 6. Tabular Output viewer */}
+          {queryResult && (
+            <div className="p-5 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm space-y-3 max-h-96 overflow-y-auto">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Query Result Table</span>
+              <div className="overflow-x-auto border border-white/5 rounded-xl bg-black/40">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-white/[0.02] border-b border-white/5 text-zinc-400 font-semibold select-none">
+                      {queryResult.columns.map((col, idx) => (
+                        <th key={idx} className="p-3 font-semibold uppercase tracking-wider">{col}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {queryResult.values.map((row, rIdx) => (
+                      <tr key={rIdx} className="border-b border-white/[0.02] hover:bg-white/[0.01] transition-all">
+                        {row.map((val, cIdx) => (
+                          <td key={cIdx} className="p-3 text-zinc-300 font-medium font-mono">
+                            {val === null || val === undefined ? "NULL" : val.toString()}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>

@@ -19,7 +19,8 @@ import {
   getLoggedInUser, 
   getUserProfile, 
   recordSolve, 
-  UserProfile 
+  UserProfile,
+  getSolvedDate
 } from "@/lib/db";
 import { puzzles, Puzzle, generateDynamicPuzzle } from "@/lib/puzzleData";
 
@@ -88,16 +89,14 @@ export default function PuzzlesSection() {
     localStorage.setItem("ic_selected_puzzle_id", puz.id);
   };
 
-  // Update states when selected puzzle changes
+  // Update states when selected puzzle changes - do not auto-fill userAnswer with saved answer
   useEffect(() => {
-    const solved = profile ? profile.solvedPuzzles.includes(activePuzzle.id) : false;
-    const savedAns = profile?.solvedPuzzleAnswers?.[activePuzzle.id] || "";
-    setUserAnswer(savedAns);
+    setUserAnswer("");
     setShowHintIndex(-1);
     setIsWrongAnswer(false);
-    setShowExplanation(solved);
+    setShowExplanation(false);
     setSuccessToast(false);
-  }, [activePuzzle, profile]);
+  }, [activePuzzle]);
 
   const handleSubmitAnswer = (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,8 +122,10 @@ export default function PuzzlesSection() {
   };
 
   const handleRevealSolution = () => {
-    // Reveal without XP
     setShowExplanation(true);
+    if (isSolved && profile) {
+      setUserAnswer(profile.solvedPuzzleAnswers?.[activePuzzle.id] || "");
+    }
   };
 
   if (!profile) return null;
@@ -212,7 +213,12 @@ export default function PuzzlesSection() {
                                   : "text-zinc-500 hover:text-white hover:bg-white/[0.01]"
                               }`}
                             >
-                              <span className="truncate pr-2 line-through text-zinc-600">{puz.title}</span>
+                              <div className="flex flex-col min-w-0 flex-1">
+                                <span className="truncate pr-2 line-through text-zinc-600">{puz.title}</span>
+                                <span className="text-[9px] text-zinc-500 font-normal mt-0.5">
+                                  Solved on {getSolvedDate(profile, puz.id, "puzzle")}
+                                </span>
+                              </div>
                               <div className="flex items-center gap-1.5 shrink-0">
                                 <span className="text-[8px] px-1.5 py-0.5 rounded border border-white/5 bg-black/40 text-zinc-500">
                                   {puz.category}
@@ -330,18 +336,17 @@ export default function PuzzlesSection() {
                     const isSelected = userAnswer === option;
                     const wasWrongPick = isWrongAnswer && isSelected;
                     
-                    // Highlight if it's the user's saved answer or matches the correct answer exactly (for legacy solved puzzles)
-                    const isSolvedPick = isSolved && (
-                      userAnswer === option || 
-                      (userAnswer === "" && activePuzzle.correctAnswers.some(ans => option.trim().toLowerCase() === ans.toLowerCase()))
+                    const isCorrectOption = activePuzzle.correctAnswers.some(ans =>
+                      option.trim().toLowerCase() === ans.toLowerCase() ||
+                      ans.toLowerCase().includes(option.trim().toLowerCase())
                     );
+                    const isCorrectPick = isSelected && isCorrectOption;
+                    const isSolvedPick = isCorrectPick || (showExplanation && isCorrectOption);
 
                     return (
                       <button
                         key={idx}
-                        disabled={isSolved}
                         onClick={() => {
-                          if (isSolved) return;
                           setUserAnswer(option);
                           setIsWrongAnswer(false);
 
@@ -391,7 +396,7 @@ export default function PuzzlesSection() {
                   })}
                 </div>
 
-                {isWrongAnswer && !isSolved && (
+                {isWrongAnswer && (
                   <div className="flex items-center gap-2.5 p-3.5 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-xs animate-shake">
                     <AlertCircle className="h-4.5 w-4.5 shrink-0" />
                     <span>Incorrect answer. Review hints and check again, or reveal solution below!</span>
@@ -400,14 +405,14 @@ export default function PuzzlesSection() {
               </div>
 
               {/* Reveal Solution Button */}
-              {!isSolved && !showExplanation && (
+              {!showExplanation && (
                 <div className="pt-4 flex justify-end">
                   <button
                     onClick={handleRevealSolution}
                     className="text-[11px] font-semibold text-zinc-500 hover:text-zinc-300 flex items-center gap-1.5 transition-colors"
                   >
                     <Eye className="h-4 w-4" />
-                    <span>Reveal Explanation (Forfeits XP)</span>
+                    <span>{isSolved ? "Show Saved Answer & Explanation" : "Reveal Explanation (Forfeits XP)"}</span>
                   </button>
                 </div>
               )}

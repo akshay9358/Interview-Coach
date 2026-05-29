@@ -20,6 +20,32 @@ export default function LoginPage() {
     }
   }, [router]);
 
+  const handleGuestLogin = () => {
+    if (typeof window !== "undefined") {
+      // Log in as Guest
+      localStorage.setItem("ic_current_user", "Guest");
+      
+      const profilesRaw = localStorage.getItem("ic_profiles") || "{}";
+      const profiles = JSON.parse(profilesRaw);
+      
+      // Force reset Guest profile to be completely empty and fresh
+      profiles["Guest"] = {
+        username: "Guest",
+        streak: 0,
+        xp: 0,
+        solvedList: [],
+        solvedPuzzles: [],
+        solvedSql: [],
+        solvedCustomCount: 0,
+        activityLog: {},
+        timedSessions: []
+      };
+      localStorage.setItem("ic_profiles", JSON.stringify(profiles));
+      
+      router.push("/dashboard");
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -34,7 +60,7 @@ export default function LoginPage() {
     // 1. Try local credentials check first
     const usersRaw = localStorage.getItem("ic_users_db");
     const users = usersRaw ? JSON.parse(usersRaw) : {};
-    const storedPassword = users[username.toLowerCase()];
+    const storedPassword = users[username.toLowerCase()] || users[username];
 
     if (
       (username.toLowerCase() === "guest" && password === "guest123") ||
@@ -49,21 +75,23 @@ export default function LoginPage() {
     try {
       const { supabase } = await import("@/lib/db");
       if (supabase) {
+        // Query case-insensitively using .ilike to match "Akshay" correctly
         const { data: cloudProfile, error: cloudErr } = await supabase
           .from("profiles")
           .select("*")
-          .eq("username", username.toLowerCase())
+          .ilike("username", username)
           .single();
 
         if (cloudProfile && cloudProfile.password === password) {
           // Sync credentials locally
           users[username.toLowerCase()] = password;
+          users[cloudProfile.username] = password;
           localStorage.setItem("ic_users_db", JSON.stringify(users));
 
           // Sync profile data locally
           const profilesRaw = localStorage.getItem("ic_profiles") || "{}";
           const profiles = JSON.parse(profilesRaw);
-          profiles[username] = {
+          profiles[cloudProfile.username] = {
             username: cloudProfile.username,
             cfHandle: cloudProfile.cf_handle,
             lcHandle: cloudProfile.lc_handle,
@@ -81,7 +109,7 @@ export default function LoginPage() {
           };
           localStorage.setItem("ic_profiles", JSON.stringify(profiles));
 
-          setLoggedInUser(username);
+          setLoggedInUser(cloudProfile.username);
           router.push("/dashboard");
           return;
         }
@@ -102,6 +130,11 @@ export default function LoginPage() {
 
       {/* Card Wrapper */}
       <div className="w-full max-w-md p-8 rounded-3xl border border-white/10 bg-zinc-950/60 backdrop-blur-xl shadow-2xl relative z-10 mx-4">
+        {/* Back to Home arrow link */}
+        <Link href="/" className="absolute top-6 left-6 text-zinc-500 hover:text-zinc-300 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors select-none">
+          <span>← Home</span>
+        </Link>
+
         {/* Branding header */}
         <div className="flex flex-col items-center mb-8">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-violet-600 to-fuchsia-600 font-bold text-white shadow-lg shadow-violet-500/25 mb-4 text-xl">
@@ -181,9 +214,15 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        {/* Demo instructions */}
-        <div className="mt-8 pt-6 border-t border-white/5 text-center text-[10px] text-zinc-500">
-          Tip: You can use username <strong className="text-zinc-400">guest</strong> and password <strong className="text-zinc-400">guest123</strong> to experience the fully functional workspace instantly!
+        {/* Demo login button */}
+        <div className="mt-6 pt-6 border-t border-white/5 text-center">
+          <button
+            onClick={handleGuestLogin}
+            type="button"
+            className="w-full py-2.5 rounded-xl border border-dashed border-violet-500/30 hover:border-violet-500 bg-violet-600/5 hover:bg-violet-600/10 text-violet-300 hover:text-violet-200 text-xs font-semibold tracking-wide transition-all duration-200 cursor-pointer outline-none shadow-sm shadow-violet-500/5"
+          >
+            Sign In as Guest
+          </button>
         </div>
       </div>
     </div>
