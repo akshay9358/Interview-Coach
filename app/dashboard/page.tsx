@@ -21,7 +21,8 @@ import {
   getUserProfile, 
   saveUserProfile, 
   recordSolve, 
-  UserProfile 
+  UserProfile,
+  getLocalTodayStr
 } from "@/lib/db";
 import { fetchCodeforcesStatus, fetchLeetCodeStatus, standardProblems } from "@/lib/apiSync";
 
@@ -99,7 +100,7 @@ export default function Dashboard() {
 
       // Record any newly matched problems in the activity log today
       if (logsAdded > 0) {
-        const todayStr = new Date().toISOString().split("T")[0];
+        const todayStr = getLocalTodayStr();
         updatedProfile.activityLog[todayStr] = (updatedProfile.activityLog[todayStr] || 0) + logsAdded;
       }
 
@@ -155,7 +156,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <span className="text-xs text-zinc-400 bg-white/[0.04] px-3 py-1.5 rounded-full border border-white/5 font-medium flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 text-violet-400 fill-current" />
-              Level {Math.floor(profile.xp / 100) + 1}
+              Level {Math.floor(profile.xp / 250) + 1}
             </span>
           </div>
         </header>
@@ -208,17 +209,17 @@ export default function Dashboard() {
               <div className="absolute top-0 right-0 h-24 w-24 bg-violet-600/10 rounded-full blur-xl group-hover:bg-violet-600/15 transition-all duration-300" />
               <div className="flex justify-between items-start mb-2">
                 <span className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">Level Progress</span>
-                <span className="text-xs text-violet-400 font-bold">Lvl {Math.floor(profile.xp / 100) + 1}</span>
+                <span className="text-xs text-violet-400 font-bold">Lvl {Math.floor(profile.xp / 250) + 1}</span>
               </div>
               <div className="space-y-3 mt-4">
                 <div className="flex justify-between text-xs font-medium">
-                  <span className="text-zinc-400">{profile.xp % 100} / 100 XP</span>
+                  <span className="text-zinc-400">{profile.xp % 250} / 250 XP</span>
                   <span className="text-zinc-500">Next Lvl</span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-zinc-800 border border-white/5 overflow-hidden">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 transition-all duration-500"
-                    style={{ width: `${profile.xp % 100}%` }}
+                    style={{ width: `${(profile.xp % 250) / 2.5}%` }}
                   />
                 </div>
               </div>

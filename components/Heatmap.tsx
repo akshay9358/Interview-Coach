@@ -27,13 +27,20 @@ export default function Heatmap({ activityLog }: HeatmapProps) {
     const startDay = startDate.getDay();
     startDate.setDate(startDate.getDate() - startDay); // Shift back to Sunday of that week
 
+    const toLocalYYYYMMDD = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
     const weeks = [];
     let currentDay = new Date(startDate);
 
     for (let w = 0; w < 53; w++) {
       const days = [];
       for (let d = 0; d < 7; d++) {
-        const dateString = currentDay.toISOString().split("T")[0];
+        const dateString = toLocalYYYYMMDD(currentDay);
         const count = activityLog[dateString] || 0;
         
         days.push({

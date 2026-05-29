@@ -328,7 +328,30 @@ export function saveUserProfile(profile: UserProfile) {
 }
 
 /**
- * Triggers a solve record update. Increases XP, adds to solved array, updates activityLog.
+ * Helper to get a local date string in YYYY-MM-DD format (timezone safe)
+ */
+export function getLocalTodayStr(): string {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Helper to resolve the XP payout based on solved problem difficulty
+ */
+function getXPByDifficulty(difficulty: "Easy" | "Medium" | "Hard"): number {
+  switch (difficulty) {
+    case "Easy": return 5;
+    case "Medium": return 10;
+    case "Hard": return 15;
+    default: return 10;
+  }
+}
+
+/**
+ * Triggers a solve record update. Increases XP based on difficulty, adds to solved array, updates activityLog.
  */
 export function recordSolve(
   username: string,
@@ -337,20 +360,40 @@ export function recordSolve(
   answer?: string
 ) {
   const profile = getUserProfile(username);
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = getLocalTodayStr();
 
   let isNewSolve = false;
+  let resolvedDiff: "Easy" | "Medium" | "Hard" = "Medium";
 
   if (itemType === "problem") {
     if (!profile.solvedList.includes(itemId)) {
       profile.solvedList.push(itemId);
-      profile.xp += 20; // 20 XP per problem
+      
+      // Resolve difficulty
+      const matched = standardProblems.find(p => p.id === itemId);
+      if (matched) {
+        resolvedDiff = matched.difficulty;
+      } else if (itemId.startsWith("cf-")) {
+        const parts = itemId.split("-");
+        const index = parts[parts.length - 1]?.toUpperCase() || "";
+        if (["A", "B"].includes(index.charAt(0))) resolvedDiff = "Easy";
+        else if (["C", "D"].includes(index.charAt(0))) resolvedDiff = "Medium";
+        else resolvedDiff = "Hard";
+      }
+      
+      profile.xp += getXPByDifficulty(resolvedDiff);
       isNewSolve = true;
     }
   } else if (itemType === "puzzle") {
     if (!profile.solvedPuzzles.includes(itemId)) {
       profile.solvedPuzzles.push(itemId);
-      profile.xp += 30; // 30 XP per puzzle
+      
+      // Resolve puzzle difficulty
+      if (itemId.includes("weight") || itemId.includes("matchstick")) resolvedDiff = "Medium";
+      else if (itemId.includes("hard") || itemId.includes("chess")) resolvedDiff = "Hard";
+      else resolvedDiff = "Easy";
+      
+      profile.xp += getXPByDifficulty(resolvedDiff);
       isNewSolve = true;
     }
     if (answer) {
@@ -361,7 +404,13 @@ export function recordSolve(
   } else if (itemType === "sql") {
     if (!profile.solvedSql.includes(itemId)) {
       profile.solvedSql.push(itemId);
-      profile.xp += 25; // 25 XP per SQL
+      
+      // Resolve SQL difficulty
+      if (itemId.includes("hard") || itemId.includes("department-top")) resolvedDiff = "Hard";
+      else if (itemId.includes("easy") || itemId.includes("duplicate")) resolvedDiff = "Easy";
+      else resolvedDiff = "Medium";
+      
+      profile.xp += getXPByDifficulty(resolvedDiff);
       isNewSolve = true;
     }
     if (answer) {
@@ -371,7 +420,7 @@ export function recordSolve(
     }
   } else if (itemType === "custom") {
     profile.solvedCustomCount += 1;
-    profile.xp += 15; // 15 XP per custom log
+    profile.xp += getXPByDifficulty("Medium"); // default custom to Medium
     isNewSolve = true;
   }
 
@@ -383,7 +432,7 @@ export function recordSolve(
 
 /**
  * Triggers a timed practice session solve record update.
- * Increases XP by 30, logs the session, updates the activity log, and saves the profile.
+ * Increases XP based on difficulty, logs the session, updates the activity log, and saves the profile.
  */
 export function recordTimedSession(
   username: string,
@@ -396,7 +445,7 @@ export function recordTimedSession(
   }
 ) {
   const profile = getUserProfile(username);
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = getLocalTodayStr();
 
   if (!profile.timedSessions) {
     profile.timedSessions = [];
@@ -413,7 +462,7 @@ export function recordTimedSession(
   };
 
   profile.timedSessions.push(newSession);
-  profile.xp += 30; // 30 XP per timed practice!
+  profile.xp += getXPByDifficulty(sessionData.difficulty || "Medium");
 
   // Register solve in contribution activity heatmap
   profile.activityLog[todayStr] = (profile.activityLog[todayStr] || 0) + 1;

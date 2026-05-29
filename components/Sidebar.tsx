@@ -79,10 +79,8 @@ export default function Sidebar() {
       {/* App Branding */}
       <div className="flex h-16 items-center justify-between px-6 border-b border-white/5">
         <Link href="/dashboard" className="flex items-center gap-2.5 group">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-tr from-violet-600 to-fuchsia-600 font-bold text-white shadow-lg shadow-violet-500/25 group-hover:scale-105 transition-transform duration-300">
-            <h1 className="w-full text-center text-xl font-bold text-white whitespace-nowrap">
-              Interview Coach
-            </h1>
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-tr from-violet-600 to-fuchsia-600 font-extrabold text-white shadow-lg shadow-violet-500/25 group-hover:scale-105 transition-transform duration-300">
+            <span className="text-sm tracking-tighter">IC</span>
           </div>
           <span className="font-semibold text-lg bg-gradient-to-r from-white via-zinc-100 to-zinc-400 bg-clip-text text-transparent">
             Interview Coach
