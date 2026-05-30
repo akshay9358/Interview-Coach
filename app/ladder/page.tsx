@@ -317,8 +317,33 @@ export default function SmartLadderPage() {
     quantMastery: 0,
     logicMastery: 0,
     verbalMastery: 0,
-    averageSpeedSec: 0
+    averageSpeedSec: 0,
+    dailyHistory: {
+      "Sun": { solved: 0, correct: 0 },
+      "Mon": { solved: 0, correct: 0 },
+      "Tue": { solved: 0, correct: 0 },
+      "Wed": { solved: 0, correct: 0 },
+      "Thu": { solved: 0, correct: 0 },
+      "Fri": { solved: 0, correct: 0 },
+      "Sat": { solved: 0, correct: 0 }
+    } as Record<string, { solved: number; correct: number }>
   });
+
+  const [questionStartTime, setQuestionStartTime] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (aptitudeSet.length > 0) {
+      setQuestionStartTime(prev => {
+        const next = { ...prev };
+        aptitudeSet.forEach(q => {
+          if (!next[q.id]) {
+            next[q.id] = Date.now();
+          }
+        });
+        return next;
+      });
+    }
+  }, [aptitudeSet]);
 
   // STAR Framework Builder States
   const [starSituation, setStarSituation] = useState("");
@@ -455,6 +480,41 @@ export default function SmartLadderPage() {
         try {
           setExamHistory(JSON.parse(savedHistRaw));
         } catch (e) {}
+      }
+
+      // One-time Reset of Aptitude Progress as requested by the user
+      if (uProf && (!uProf.solvedPuzzleAnswers || !uProf.solvedPuzzleAnswers["aptitude_progress_reset_v1"])) {
+        console.log("Resetting Smart Aptitude (AI) progress as requested by the user...");
+        
+        let correctAnswersGained = 0;
+        if (uProf.solvedPuzzleAnswers && uProf.solvedPuzzleAnswers["aptitude_stats"]) {
+          try {
+            const parsed = JSON.parse(uProf.solvedPuzzleAnswers["aptitude_stats"]);
+            correctAnswersGained = parsed.correctCount || 0;
+          } catch (e) {}
+        }
+        
+        // Deduct XP gained from correct aptitude answers
+        const xpDeduction = correctAnswersGained * 15;
+        uProf.xp = Math.max(0, uProf.xp - xpDeduction);
+        
+        // Filter out aptitude question IDs from solved list (IDs start with "apt-")
+        uProf.solvedPuzzles = uProf.solvedPuzzles.filter(id => !id.startsWith("apt-"));
+        
+        // Remove individual aptitude question answers
+        if (!uProf.solvedPuzzleAnswers) uProf.solvedPuzzleAnswers = {};
+        const answers = uProf.solvedPuzzleAnswers;
+        if (answers) {
+          Object.keys(answers).forEach(key => {
+            if (key.startsWith("apt-") || key === "aptitude_stats" || key === "aptitude_daily_set" || key === "aptitude_difficulties") {
+              delete answers[key];
+            }
+          });
+          answers["aptitude_progress_reset_v1"] = "true";
+        }
+        
+        // Save the profile to automatically sync to Supabase Cloud
+        saveUserProfile(uProf);
       }
 
       // Load aptitude stats and daily set
@@ -924,9 +984,22 @@ export default function SmartLadderPage() {
     const uProf = { ...profile };
     uProf.xp += xpReward;
 
+    // Track the question as solved so they cannot answer it again to farm XP
+    if (!uProf.solvedPuzzles.includes(q.id)) {
+      uProf.solvedPuzzles.push(q.id);
+    }
+
+    const startTime = questionStartTime[q.id] || Date.now();
+    const timeSpent = Math.max(2, Math.round((Date.now() - startTime) / 1000)); // cap at min 2 seconds for realism
+
     const currentStats = { ...aptStats };
+    const oldSolvedCount = currentStats.solvedCount;
     currentStats.solvedCount += 1;
     if (isCorrect) currentStats.correctCount += 1;
+
+    // Calculate new average speed
+    const totalTimeBefore = oldSolvedCount * currentStats.averageSpeedSec;
+    currentStats.averageSpeedSec = Math.round((totalTimeBefore + timeSpent) / currentStats.solvedCount);
 
     // Adjust mastery score percentage
     const masteryKeyMap = {
@@ -944,6 +1017,7 @@ export default function SmartLadderPage() {
     setAptStats(currentStats);
 
     if (!uProf.solvedPuzzleAnswers) uProf.solvedPuzzleAnswers = {};
+    uProf.solvedPuzzleAnswers[q.id] = selectedOption;
     uProf.solvedPuzzleAnswers["aptitude_stats"] = JSON.stringify(currentStats);
     uProf.solvedPuzzleAnswers["aptitude_difficulties"] = JSON.stringify(updatedDifficulties);
     saveUserProfile(uProf);
@@ -954,6 +1028,65 @@ export default function SmartLadderPage() {
     } else {
       showToast(`Incorrect! Explanation unlocked. ${q.category} difficulty set to ${nextDiff}.`);
     }
+  };
+
+  // Dynamically load next unsolved question for a category
+  const handleLoadNextAptitudeQuestion = (q: AptitudeQuestion) => {
+    if (!profile) return;
+
+    const currentDiff = aptitudeDifficulties[q.category] || "Medium";
+
+    // Filter the pool of this category and difficulty for questions that have NOT been solved/attempted by the user yet
+    let pool = APTITUDE_POOL.filter(
+      item => item.category === q.category &&
+      item.difficulty === currentDiff &&
+      !profile.solvedPuzzles.includes(item.id) &&
+      !(profile.solvedPuzzleAnswers && profile.solvedPuzzleAnswers[item.id])
+    );
+
+    // If pool is empty, relax the difficulty filter
+    if (pool.length === 0) {
+      pool = APTITUDE_POOL.filter(
+        item => item.category === q.category &&
+        !profile.solvedPuzzles.includes(item.id) &&
+        !(profile.solvedPuzzleAnswers && profile.solvedPuzzleAnswers[item.id])
+      );
+    }
+
+    // If still empty (user has solved absolutely all questions in this category), fallback to any question that is not the current one
+    if (pool.length === 0) {
+      pool = APTITUDE_POOL.filter(item => item.category === q.category && item.id !== q.id);
+    }
+
+    const nextQ = pool[Math.floor(Math.random() * pool.length)] || q;
+
+    // Replace in aptitudeSet
+    const updatedSet = aptitudeSet.map(item => item.id === q.id ? nextQ : item);
+    setAptitudeSet(updatedSet);
+
+    // Clear answers and revealed states for this slot
+    setAptitudeAnswers(prev => {
+      const next = { ...prev };
+      delete next[q.id];
+      delete next[nextQ.id];
+      return next;
+    });
+
+    setAptitudeRevealed(prev => {
+      const next = { ...prev };
+      delete next[q.id];
+      delete next[nextQ.id];
+      return next;
+    });
+
+    // Save updated daily set to user profile
+    const uProf = { ...profile };
+    if (!uProf.solvedPuzzleAnswers) uProf.solvedPuzzleAnswers = {};
+    uProf.solvedPuzzleAnswers["aptitude_daily_set"] = JSON.stringify(updatedSet);
+    saveUserProfile(uProf);
+    setProfile(uProf);
+
+    showToast(`Loaded a new ${q.category} question!`);
   };
 
   // Exam simulator trigger
@@ -1052,7 +1185,7 @@ export default function SmartLadderPage() {
 
     localStorage.setItem("ic_active_timer", JSON.stringify({
       title: `${q.category} Aptitude: ${q.question.substring(0, 35)}...`,
-      link: "https://www.leetcode.com/problems/two-sum/", // mock fallback link
+      link: "", // no external link needed for local aptitude questions
       plat: "Puzzles",
       diff: q.difficulty,
       startTime: null,
@@ -1188,7 +1321,7 @@ export default function SmartLadderPage() {
               <span>Daily Routine</span>
             </button>
 
-            <button
+             <button
               onClick={() => handleTabChange("ladder")}
               className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
                 activeTab === "ladder"
@@ -1201,18 +1334,6 @@ export default function SmartLadderPage() {
             </button>
 
             <button
-              onClick={() => handleTabChange("behavioral")}
-              className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
-                activeTab === "behavioral"
-                  ? "border-violet-500 text-white"
-                  : "border-transparent text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              <BookOpen className="h-3.5 w-3.5" />
-              <span>Behavioral & Case Prep</span>
-            </button>
-
-            <button
               onClick={() => handleTabChange("aptitude")}
               className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
                 activeTab === "aptitude"
@@ -1222,6 +1343,18 @@ export default function SmartLadderPage() {
             >
               <Award className="h-3.5 w-3.5" />
               <span>Smart Aptitude (AI)</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange("behavioral")}
+              className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+                activeTab === "behavioral"
+                  ? "border-violet-500 text-white"
+                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              <span>Behavioral & Case Prep</span>
             </button>
           </div>
         </div>
@@ -2076,7 +2209,7 @@ export default function SmartLadderPage() {
               {/* Top Overview Cards row */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
                 <div className="p-4 rounded-xl border border-white/5 bg-zinc-900/40 text-center space-y-1">
-                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Solved Solves</span>
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Total Attempts</span>
                   <span className="text-2xl font-bold text-white block">{aptStats.solvedCount}</span>
                 </div>
                 <div className="p-4 rounded-xl border border-white/5 bg-zinc-900/40 text-center space-y-1">
@@ -2199,6 +2332,16 @@ export default function SmartLadderPage() {
                                 <p className="text-xs text-zinc-400 leading-relaxed font-medium">
                                   {q.explanation}
                                 </p>
+                                <div className="border-t border-white/5 pt-3 mt-2 flex justify-between items-center">
+                                  <span className="text-[9px] text-zinc-500 font-bold uppercase">Challenge Resolved</span>
+                                  <button
+                                    onClick={() => handleLoadNextAptitudeQuestion(q)}
+                                    className="px-3.5 py-1.5 rounded-lg bg-violet-650 hover:bg-violet-650/80 text-white text-[10px] font-extrabold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-md shadow-violet-600/20"
+                                  >
+                                    <span>Next {q.category} Challenge</span>
+                                    <ArrowRight className="h-3 w-3 text-white" />
+                                  </button>
+                                </div>
                               </div>
                             )}
                           </div>
@@ -2468,12 +2611,12 @@ export default function SmartLadderPage() {
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart
                           data={[
-                            { day: "Mon", accuracy: aptStats.solvedCount > 0 ? 45 : 0 },
-                            { day: "Tue", accuracy: aptStats.solvedCount > 0 ? 55 : 0 },
-                            { day: "Wed", accuracy: aptStats.solvedCount > 0 ? 50 : 0 },
-                            { day: "Thu", accuracy: aptStats.solvedCount > 0 ? Math.min(100, Math.round(aptStats.quantMastery * 0.9)) : 0 },
-                            { day: "Fri", accuracy: aptStats.solvedCount > 0 ? Math.min(100, Math.round(aptStats.logicMastery * 0.95)) : 0 },
-                            { day: "Sat", accuracy: aptStats.solvedCount > 0 ? Math.min(100, Math.round((aptStats.quantMastery + aptStats.logicMastery + aptStats.verbalMastery) / 3)) : 0 }
+                            { day: "Mon", accuracy: aptStats.correctCount > 0 ? 45 : 0 },
+                            { day: "Tue", accuracy: aptStats.correctCount > 0 ? 55 : 0 },
+                            { day: "Wed", accuracy: aptStats.correctCount > 0 ? 50 : 0 },
+                            { day: "Thu", accuracy: aptStats.correctCount > 0 ? Math.min(100, Math.round(aptStats.quantMastery * 0.9)) : 0 },
+                            { day: "Fri", accuracy: aptStats.correctCount > 0 ? Math.min(100, Math.round(aptStats.logicMastery * 0.95)) : 0 },
+                            { day: "Sat", accuracy: aptStats.correctCount > 0 ? Math.min(100, Math.round((aptStats.quantMastery + aptStats.logicMastery + aptStats.verbalMastery) / 3)) : 0 }
                           ]}
                           margin={{ top: 5, right: 5, left: -25, bottom: 5 }}
                         >
