@@ -384,6 +384,7 @@ export default function SmartLadderPage() {
   const [examActive, setExamActive] = useState(false);
   const [examFinished, setExamFinished] = useState(false);
   const [examScore, setExamScore] = useState(0);
+  const [examPaused, setExamPaused] = useState(false);
 
   // Aptitude Cumulative Stats (hydrated from/saved to profile.solvedPuzzleAnswers)
   const [aptStats, setAptStats] = useState({
@@ -1051,7 +1052,7 @@ export default function SmartLadderPage() {
   // Exam countdown clock useEffect
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
-    if (examActive && examTimeRemaining > 0) {
+    if (examActive && !examPaused && examTimeRemaining > 0) {
       interval = setInterval(() => {
         setExamTimeRemaining(prev => {
           if (prev <= 1) {
@@ -1066,7 +1067,7 @@ export default function SmartLadderPage() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [examActive, examTimeRemaining, examAnswers, examQuestions]);
+  }, [examActive, examTimeRemaining, examAnswers, examQuestions, examPaused]);
 
   // Aptitude daily challenge answering logic with Adaptive Difficulty
   const handleAptitudeAnswerSelect = (q: AptitudeQuestion, selectedOption: string) => {
@@ -1252,6 +1253,7 @@ export default function SmartLadderPage() {
     setExamTimeRemaining(seconds);
     setExamActive(true);
     setExamFinished(false);
+    setExamPaused(false);
     setExamScore(0);
     showToast(`AI Exam Mode Activated: ${company} mock test initiated!`);
   };
@@ -2604,41 +2606,90 @@ export default function SmartLadderPage() {
                               Solve all mock questions before the clock expires!
                             </span>
                           </div>
-                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-rose-600/10 border border-rose-500/20 text-rose-400 font-extrabold text-xs tracking-wider shrink-0 select-none">
-                            <Clock className="h-4 w-4 animate-pulse" />
-                            <span>
-                              {Math.floor(examTimeRemaining / 60)}:
-                              {String(examTimeRemaining % 60).padStart(2, "0")}
-                            </span>
+                          <div className="flex items-center gap-2">
+                            {/* Pause / Resume Button */}
+                            <button
+                              onClick={() => setExamPaused(!examPaused)}
+                              className={`px-3 py-1.5 rounded-xl border text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                                examPaused
+                                  ? "bg-emerald-600/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-600/20"
+                                  : "bg-amber-600/10 border-amber-500/20 text-amber-400 hover:bg-amber-600/20"
+                              }`}
+                            >
+                              {examPaused ? "▶ Resume" : "⏸ Pause"}
+                            </button>
+
+                            {/* Cancel Button */}
+                            <button
+                              onClick={() => {
+                                if (confirm("Are you sure you want to cancel this mock test? Your progress will be lost.")) {
+                                  setExamActive(false);
+                                  setExamFinished(false);
+                                  setExamCompany(null);
+                                  setExamPaused(false);
+                                  showToast("Mock test cancelled.");
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-xl border bg-rose-600/10 border-rose-500/20 text-rose-450 hover:bg-rose-650/20 text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer"
+                            >
+                              ✕ Cancel
+                            </button>
+
+                            {/* Timer Display */}
+                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900 border border-white/5 text-zinc-300 font-extrabold text-xs tracking-wider select-none shrink-0">
+                              <Clock className="h-4 w-4 animate-pulse" />
+                              <span className={examPaused ? "text-zinc-500 line-through" : "text-white"}>
+                                {Math.floor(examTimeRemaining / 60)}:
+                                {String(examTimeRemaining % 60).padStart(2, "0")}
+                              </span>
+                            </div>
                           </div>
                         </div>
 
-                        <div className="space-y-6">
-                          {examQuestions.map((q, idx) => {
-                            const selected = examAnswers[q.id];
-                            return (
-                              <div key={q.id} className="p-4 rounded-xl border border-white/5 bg-black/20 space-y-3">
-                                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Question {idx + 1} ({q.category})</span>
-                                <h5 className="font-bold text-xs text-zinc-200 leading-relaxed">{q.question}</h5>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
-                                  {q.options.map(opt => (
-                                    <button
-                                      key={opt}
-                                      onClick={() => setExamAnswers(prev => ({ ...prev, [q.id]: opt }))}
-                                      className={`px-3.5 py-2.5 rounded-lg border text-left text-xs font-semibold transition-all cursor-pointer ${
-                                        selected === opt
-                                          ? "border-violet-500 bg-violet-600/10 text-white font-bold"
-                                          : "border-white/5 bg-white/[0.01] hover:bg-white/[0.03] text-zinc-400 hover:text-white"
-                                      }`}
-                                    >
-                                      {opt}
-                                    </button>
-                                  ))}
+                        {examPaused ? (
+                          <div className="p-8 rounded-xl border border-dashed border-white/10 bg-black/40 text-center py-16 flex flex-col items-center justify-center space-y-3.5 animate-fadeIn">
+                            <Clock className="h-10 w-10 text-amber-400 animate-bounce" />
+                            <div className="space-y-1">
+                              <h5 className="font-extrabold text-sm text-white uppercase tracking-wider">AI Mock Test Paused</h5>
+                              <p className="text-[10px] text-zinc-500 max-w-sm mx-auto leading-relaxed">
+                                The countdown clock is currently stopped. To ensure diagnostic fairness, questions are blurred until the test is resumed.
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => setExamPaused(false)}
+                              className="px-6 py-2.5 rounded-xl bg-violet-650 hover:bg-violet-600 text-xs font-bold text-white shadow-lg shadow-violet-600/20 cursor-pointer active:scale-95 transition-all select-none uppercase tracking-wider"
+                            >
+                              Resume Mock Test
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-6">
+                            {examQuestions.map((q, idx) => {
+                              const selected = examAnswers[q.id];
+                              return (
+                                <div key={q.id} className="p-4 rounded-xl border border-white/5 bg-black/20 space-y-3">
+                                  <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Question {idx + 1} ({q.category})</span>
+                                  <h5 className="font-bold text-xs text-zinc-200 leading-relaxed">{q.question}</h5>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+                                    {q.options.map(opt => (
+                                      <button
+                                        key={opt}
+                                        onClick={() => setExamAnswers(prev => ({ ...prev, [q.id]: opt }))}
+                                        className={`px-3.5 py-2.5 rounded-lg border text-left text-xs font-semibold transition-all cursor-pointer ${
+                                          selected === opt
+                                            ? "border-violet-500 bg-violet-600/10 text-white font-bold"
+                                            : "border-white/5 bg-white/[0.01] hover:bg-white/[0.03] text-zinc-400 hover:text-white"
+                                        }`}
+                                      >
+                                        {opt}
+                                      </button>
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                              );
+                            })}
+                          </div>
+                        )}
 
                         <button
                           onClick={() => finishExam(examAnswers, examQuestions)}
