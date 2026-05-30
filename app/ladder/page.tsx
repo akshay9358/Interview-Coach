@@ -649,9 +649,21 @@ export default function SmartLadderPage() {
       if (uProf.solvedPuzzleAnswers?.["aptitude_daily_set"]) {
         try {
           const parsedSet = JSON.parse(uProf.solvedPuzzleAnswers["aptitude_daily_set"]);
-          if (Array.isArray(parsedSet) && parsedSet.length >= 3) {
+          if (Array.isArray(parsedSet) && parsedSet.length === 5) {
             setAptitudeSet(parsedSet);
             dailySetLoaded = true;
+
+            // Hydrate answers and revealed states for pre-solved questions in daily set
+            const answers: Record<string, string> = {};
+            const revealed: Record<string, boolean> = {};
+            parsedSet.forEach((q: any) => {
+              if (uProf.solvedPuzzleAnswers![q.id]) {
+                answers[q.id] = uProf.solvedPuzzleAnswers![q.id];
+                revealed[q.id] = true;
+              }
+            });
+            setAptitudeAnswers(answers);
+            setAptitudeRevealed(revealed);
           }
         } catch (e) {}
       }
@@ -676,6 +688,19 @@ export default function SmartLadderPage() {
         setAptitudeSet(freshSet);
         if (!uProf.solvedPuzzleAnswers) uProf.solvedPuzzleAnswers = {};
         uProf.solvedPuzzleAnswers["aptitude_daily_set"] = JSON.stringify(freshSet);
+
+        // Hydrate answers and revealed states for pre-solved questions in fresh set
+        const answers: Record<string, string> = {};
+        const revealed: Record<string, boolean> = {};
+        freshSet.forEach(q => {
+          if (uProf.solvedPuzzleAnswers![q.id]) {
+            answers[q.id] = uProf.solvedPuzzleAnswers![q.id];
+            revealed[q.id] = true;
+          }
+        });
+        setAptitudeAnswers(answers);
+        setAptitudeRevealed(revealed);
+
         saveUserProfile(uProf);
       }
     }
@@ -1238,11 +1263,14 @@ export default function SmartLadderPage() {
     const count = qCountMap[company];
     const seconds = timeMap[company];
 
-    // Pick questions representing a realistic company mix from APTITUDE_POOL
-    const questions: AptitudeQuestion[] = [];
-    const pool = [...APTITUDE_POOL];
+    // Pick questions representing a realistic company mix from APTITUDE_POOL that are not in daily set
+    const dailySetIds = new Set(aptitudeSet.map(q => q.id));
+    let pool = APTITUDE_POOL.filter(q => !dailySetIds.has(q.id));
+    
     // shuffle
-    pool.sort(() => 0.5 - Math.random());
+    pool = [...pool].sort(() => 0.5 - Math.random());
+    
+    const questions: AptitudeQuestion[] = [];
     for (let i = 0; i < count; i++) {
       questions.push(pool[i % pool.length]);
     }
@@ -2418,7 +2446,17 @@ export default function SmartLadderPage() {
                               </div>
 
                               {/* One-click Action Triggers */}
-                              <div className="flex gap-1 shrink-0">
+                              <div className="flex gap-1.5 shrink-0 items-center">
+                                {isAnswered && (
+                                  <button
+                                    onClick={() => handleLoadNextAptitudeQuestion(q)}
+                                    title="Load Next Question"
+                                    className="px-3 py-1.5 rounded-xl border border-violet-500/20 bg-violet-650 hover:bg-violet-600 text-white font-extrabold text-[10px] uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1 active:scale-95 shrink-0"
+                                  >
+                                    <span>Next Q</span>
+                                    <ArrowRight className="h-3 w-3" />
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => handleAddAptitudeToDailyRoutine(q)}
                                   title="Add to Daily Routine"
