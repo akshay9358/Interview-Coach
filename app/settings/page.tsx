@@ -184,7 +184,7 @@ with check (true);`;
         </header>
 
         {/* Inner Settings dashboard */}
-        <div className="p-8 space-y-8 max-w-5xl w-full mx-auto">
+        <div className="lg:p-8 p-4 space-y-8 max-w-5xl w-full mx-auto">
           
           {/* Connection diagnostics panel */}
           <div className={`p-6 rounded-2xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-all ${

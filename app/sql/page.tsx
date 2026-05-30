@@ -49,16 +49,28 @@ export default function SqlPractice() {
   // SQLite WASM database reference
   const dbRef = useRef<any>(null);
 
-  // Dynamically extend SQL problems list so we always show at least 10 unsolved SQL problems
   const displayProblems = useMemo(() => {
     if (!profile) return sqlProblems;
-    const list = [...sqlProblems];
+    
+    let customList: SqlProblem[] = [];
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("ic_custom_sql_problems");
+      if (saved) {
+        try {
+          customList = JSON.parse(saved);
+        } catch (e) {
+          console.error("Failed to parse custom sql problems:", e);
+        }
+      }
+    }
+    
+    const list = [...sqlProblems, ...customList];
     let unsolvedCount = list.filter(p => !profile.solvedSql.includes(p.id)).length;
     
     let i = 0;
     while (unsolvedCount < 10 && i < 100) { // safety cap of 100
       const newId = `dyn-sql-${i}`;
-      if (!sqlProblems.some(p => p.id === newId)) {
+      if (!list.some(p => p.id === newId)) {
         const prob = generateDynamicSqlProblem(i, newId);
         if (!profile.solvedSql.includes(prob.id)) {
           list.push(prob);
@@ -702,10 +714,10 @@ export default function SqlPractice() {
         </header>
 
         {/* Console view layout */}
-        <div className="p-8 flex flex-col gap-6 max-w-4xl w-full mx-auto">
+        <div className="lg:p-8 p-4 flex flex-col gap-6 max-w-4xl w-full mx-auto">
           
           {/* 1. SELECT SQL PROBLEM scrollable select list */}
-          <div className="p-5 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm">
+          <div className="p-4 sm:p-5 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm">
             <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-3">Select SQL Problem</label>
             
             {/* Scrollable list of all problems (shows ~4 items, scroll to see more) */}
@@ -787,7 +799,7 @@ export default function SqlPractice() {
           </div>
 
           {/* 2. Problem Statement & Table Schema Details Card */}
-          <div className="p-6 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm space-y-4">
+          <div className="p-4 sm:p-6 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm space-y-4">
             <h3 className="text-md font-bold text-white flex items-center gap-2">
               <BookOpen className="h-5 w-5 text-violet-400" />
               Problem Statement

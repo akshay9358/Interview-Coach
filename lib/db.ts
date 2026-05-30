@@ -187,10 +187,22 @@ export function healUserProfile(profile: UserProfile): UserProfile {
       // Gather all solved puzzles and SQL problems
       const itemsToAllocate: { id: string; type: "puzzle" | "sql" }[] = [];
       profile.solvedPuzzles.forEach(id => {
-        itemsToAllocate.push({ id, type: "puzzle" });
+        // If it already has a valid date, count it as allocated and do not re-allocate
+        const existingDate = profile.solvedPuzzleAnswers?.[id + "_date"];
+        if (existingDate && dateCapacities[existingDate]) {
+          dateCapacities[existingDate].allocated++;
+        } else {
+          itemsToAllocate.push({ id, type: "puzzle" });
+        }
       });
       profile.solvedSql.forEach(id => {
-        itemsToAllocate.push({ id, type: "sql" });
+        // If it already has a valid date, count it as allocated and do not re-allocate
+        const existingDate = profile.solvedSqlAnswers?.[id + "_date"];
+        if (existingDate && dateCapacities[existingDate]) {
+          dateCapacities[existingDate].allocated++;
+        } else {
+          itemsToAllocate.push({ id, type: "sql" });
+        }
       });
 
       // Allocate items to dates that still have remaining capacity
@@ -206,10 +218,14 @@ export function healUserProfile(profile: UserProfile): UserProfile {
         // Assign the date
         if (item.type === "puzzle") {
           if (!profile.solvedPuzzleAnswers) profile.solvedPuzzleAnswers = {};
-          profile.solvedPuzzleAnswers[item.id + "_date"] = targetDate;
+          if (!profile.solvedPuzzleAnswers[item.id + "_date"]) {
+            profile.solvedPuzzleAnswers[item.id + "_date"] = targetDate;
+          }
         } else {
           if (!profile.solvedSqlAnswers) profile.solvedSqlAnswers = {};
-          profile.solvedSqlAnswers[item.id + "_date"] = targetDate;
+          if (!profile.solvedSqlAnswers[item.id + "_date"]) {
+            profile.solvedSqlAnswers[item.id + "_date"] = targetDate;
+          }
         }
         
         dateCapacities[targetDate].allocated++;
@@ -236,7 +252,8 @@ export function healUserProfile(profile: UserProfile): UserProfile {
     const activeDates = Object.keys(profile.activityLog || {})
       .filter(d => profile.activityLog[d] > 0)
       .sort((a, b) => b.localeCompare(a));
-    const targetDate = activeDates.find(d => d !== "2026-05-27" && d !== "2026-05-28") || todayStr;
+    // Prefer assigning excess to historical dates (e.g. May 27/28) rather than todayStr to keep today's progress realistic
+    const targetDate = activeDates.find(d => d === "2026-05-27" || d === "2026-05-28") || activeDates[0] || todayStr;
     profile.activityLog[targetDate] = (profile.activityLog[targetDate] || 0) + diff;
   } else if (currentActivitySum > totalSolves) {
     let toSubtract = currentActivitySum - totalSolves;
@@ -551,6 +568,11 @@ export function recordSolve(
       profile.xp += getXPByDifficulty(resolvedDiff);
       isNewSolve = true;
     }
+    if (!profile.solvedPuzzleAnswers) profile.solvedPuzzleAnswers = {};
+    if (!profile.solvedPuzzleAnswers[itemId + "_date"]) {
+      profile.solvedPuzzleAnswers[itemId + "_date"] = todayStr;
+      isNewSolve = true;
+    }
   } else if (itemType === "puzzle") {
     if (!profile.solvedPuzzles.includes(itemId)) {
       profile.solvedPuzzles.push(itemId);
@@ -638,6 +660,25 @@ export function recordTimedSession(
 
   profile.timedSessions.push(newSession);
   profile.xp += getXPByDifficulty(sessionData.difficulty || "Medium");
+
+  // Record date explicitly in solvedPuzzleAnswers
+  if (!profile.solvedPuzzleAnswers) profile.solvedPuzzleAnswers = {};
+  profile.solvedPuzzleAnswers[sessionData.linkOrId + "_date"] = todayStr;
+
+  // Sync to appropriate solved list if not already present
+  if (sessionData.platform === "SQL") {
+    if (!profile.solvedSql.includes(sessionData.linkOrId)) {
+      profile.solvedSql.push(sessionData.linkOrId);
+    }
+  } else if (sessionData.platform === "Puzzles") {
+    if (!profile.solvedPuzzles.includes(sessionData.linkOrId)) {
+      profile.solvedPuzzles.push(sessionData.linkOrId);
+    }
+  } else {
+    if (!profile.solvedList.includes(sessionData.linkOrId)) {
+      profile.solvedList.push(sessionData.linkOrId);
+    }
+  }
 
   // Register solve in contribution activity heatmap
   profile.activityLog[todayStr] = (profile.activityLog[todayStr] || 0) + 1;

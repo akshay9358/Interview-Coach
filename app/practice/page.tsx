@@ -31,6 +31,7 @@ export default function PracticeTracker() {
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [verifyMessage, setVerifyMessage] = useState<{ id: string; text: string; error: boolean } | null>(null);
   const [dynamicProblems, setDynamicProblems] = useState<PracticeProblem[]>([]);
+  const [customProblems, setCustomProblems] = useState<PracticeProblem[]>([]);
   const [loadingCf, setLoadingCf] = useState(false);
 
   useEffect(() => {
@@ -39,9 +40,22 @@ export default function PracticeTracker() {
       setProfile(getUserProfile(user));
     }
 
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("ic_custom_problems");
+      if (saved) {
+        setCustomProblems(JSON.parse(saved));
+      }
+    }
+
     const handleUpdate = () => {
       if (user) {
         setProfile(getUserProfile(user));
+      }
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("ic_custom_problems");
+        if (saved) {
+          setCustomProblems(JSON.parse(saved));
+        }
       }
     };
 
@@ -137,7 +151,7 @@ export default function PracticeTracker() {
 
   if (!profile) return null;
 
-  const allProblems = [...standardProblems, ...dynamicProblems];
+  const allProblems = [...standardProblems, ...dynamicProblems, ...customProblems];
 
   // Calculate counts w.r.t active category (tab) & difficulty
   const baseFiltered = allProblems.filter(problem => {
@@ -194,9 +208,9 @@ export default function PracticeTracker() {
         </header>
 
         {/* Dashboard inner details */}
-        <div className="p-8 space-y-8 max-w-6xl w-full mx-auto">
+        <div className="lg:p-8 p-4 space-y-8 max-w-6xl w-full mx-auto">
           {/* Top Filter and Search Bar */}
-          <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-zinc-900/40 p-5 rounded-2xl border border-white/5 backdrop-blur-sm">
+          <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-zinc-900/40 p-4 sm:p-5 rounded-2xl border border-white/5 backdrop-blur-sm">
             {/* Platform categories */}
             <div className="flex gap-1 bg-black/60 p-1.5 rounded-xl border border-white/5 w-full md:w-auto shrink-0">
               {(["All", "DSA", "CP"] as const).map(tab => (
@@ -290,7 +304,7 @@ export default function PracticeTracker() {
                 return (
                   <div
                     key={prob.id}
-                    className={`p-5 rounded-2xl border transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${
+                    className={`p-4 sm:p-5 rounded-2xl border transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${
                       isSolved
                         ? "bg-emerald-950/[0.04] border-emerald-500/10 hover:border-emerald-500/20"
                         : "bg-zinc-900/20 border-white/5 hover:border-white/10"

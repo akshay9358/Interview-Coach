@@ -17,7 +17,8 @@ import {
   Timer,
   Settings,
   Menu,
-  X
+  X,
+  Sparkles
 } from "lucide-react";
 import { getLoggedInUser, getUserProfile, UserProfile } from "@/lib/db";
 
@@ -67,6 +68,7 @@ export default function Sidebar() {
 
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+    { name: "Smart Prep (AI)", path: "/ladder", icon: Sparkles },
     { name: "Problems Tracker", path: "/practice", icon: Code },
     { name: "Timed Practice", path: "/timer", icon: Timer },
     { name: "SQL Playground", path: "/sql", icon: Terminal },

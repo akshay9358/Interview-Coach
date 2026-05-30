@@ -40,6 +40,25 @@ export default function PuzzlesSection() {
       setProfile(getUserProfile(user));
     }
 
+    // Clean up any non-puzzle items incorrectly added in previous sessions
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("ic_custom_puzzles");
+      if (saved) {
+        try {
+          const list = JSON.parse(saved);
+          const filtered = list.filter((p: any) => {
+            const isCodeforces = p.id?.startsWith("cf-") || p.id?.includes("codeforces") || p.title?.includes("CF ") || p.title?.includes("DSA:") || p.category === "CP" || p.category === "DSA";
+            return !isCodeforces;
+          });
+          if (filtered.length !== list.length) {
+            localStorage.setItem("ic_custom_puzzles", JSON.stringify(filtered));
+          }
+        } catch (e) {
+          console.error("Failed to clean custom puzzles:", e);
+        }
+      }
+    }
+
     const handleUpdate = () => {
       if (user) {
         setProfile(getUserProfile(user));
@@ -55,13 +74,26 @@ export default function PuzzlesSection() {
   // Dynamically extend puzzles list so we always show at least 10 unsolved puzzles
   const displayPuzzles = useMemo(() => {
     if (!profile) return puzzles;
-    const list = [...puzzles];
+    
+    let customList: Puzzle[] = [];
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("ic_custom_puzzles");
+      if (saved) {
+        try {
+          customList = JSON.parse(saved);
+        } catch (e) {
+          console.error("Failed to parse custom puzzles:", e);
+        }
+      }
+    }
+
+    const list = [...puzzles, ...customList];
     let unsolvedCount = list.filter(p => !profile.solvedPuzzles.includes(p.id)).length;
     
     let i = 0;
     while (unsolvedCount < 10 && i < 100) { // safety cap of 100
       const newId = `dyn-puz-${i}`;
-      if (!puzzles.some(p => p.id === newId)) {
+      if (!list.some(p => p.id === newId)) {
         const puz = generateDynamicPuzzle(i, newId);
         if (!profile.solvedPuzzles.includes(puz.id)) {
           list.push(puz);
@@ -152,115 +184,137 @@ export default function PuzzlesSection() {
         {/* Inner layout details */}
         <div className="lg:p-8 p-4 grid grid-cols-1 lg:grid-cols-12 gap-8 max-w-7xl w-full mx-auto">
           
-          {/* Left Column: Puzzle Lists Selector (col-span-5) */}
-          <div className="lg:col-span-5 space-y-4">
-            <div className="p-5 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-4">Trending Quant Puzzles</span>
+          {/* Left Column: Puzzle Selector, Streak, and Tip in a single height-matched outer card */}
+          <div className="lg:col-span-5 h-full">
+            <div className="p-6 rounded-3xl border border-white/5 bg-zinc-900/40 backdrop-blur-md shadow-xl h-full flex flex-col justify-between space-y-6">
               
-              <div className="space-y-1.5 max-h-[380px] overflow-y-auto pr-1">
-                {/* Unsolved puzzles */}
-                {displayPuzzles.filter(puz => !profile.solvedPuzzles.includes(puz.id)).map((puz) => {
-                  const active = activePuzzle.id === puz.id;
-                  return (
-                    <button
-                      key={puz.id}
-                      onClick={() => handleSelectPuzzle(puz)}
-                      className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex justify-between items-center transition-all ${
-                        active
-                          ? "bg-violet-600/20 text-violet-300 border border-violet-500/20 shadow-inner"
-                          : "text-zinc-400 hover:text-white hover:bg-white/[0.02]"
-                      }`}
-                    >
-                      <span className="truncate pr-2">{puz.title}</span>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-[8px] px-1.5 py-0.5 rounded border border-white/5 bg-black/40 text-zinc-500">
-                          {puz.category}
-                        </span>
-                        <span className={`text-[8px] px-1.5 py-0.5 rounded border font-semibold ${
-                          puz.difficulty === "Easy" ? "border-emerald-500/20 text-emerald-400 bg-emerald-500/5" :
-                          puz.difficulty === "Medium" ? "border-amber-500/20 text-amber-400 bg-amber-500/5" :
-                          "border-rose-500/20 text-rose-400 bg-rose-500/5"
-                        }`}>
-                          {puz.difficulty}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
+              {/* Part 1: Trending Puzzles List */}
+              <div className="space-y-3">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Trending Quant Puzzles</span>
+                
+                <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+                  {/* Unsolved puzzles */}
+                  {displayPuzzles.filter(puz => !profile.solvedPuzzles.includes(puz.id)).map((puz) => {
+                    const active = activePuzzle.id === puz.id;
+                    return (
+                      <button
+                        key={puz.id}
+                        onClick={() => handleSelectPuzzle(puz)}
+                        className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex justify-between items-center transition-all ${
+                          active
+                            ? "bg-violet-600/20 text-violet-300 border border-violet-500/20 shadow-inner"
+                            : "text-zinc-400 hover:text-white hover:bg-white/[0.02]"
+                        }`}
+                      >
+                        <span className="truncate pr-2">{puz.title}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[8px] px-1.5 py-0.5 rounded border border-white/5 bg-black/40 text-zinc-500">
+                            {puz.category}
+                          </span>
+                          <span className={`text-[8px] px-1.5 py-0.5 rounded border font-semibold ${
+                            puz.difficulty === "Easy" ? "border-emerald-500/20 text-emerald-400 bg-emerald-500/5" :
+                            puz.difficulty === "Medium" ? "border-amber-500/20 text-amber-400 bg-amber-500/5" :
+                            "border-rose-500/20 text-rose-400 bg-rose-500/5"
+                          }`}>
+                            {puz.difficulty}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
 
-                {/* Collapsible Solved Puzzles Dropdown */}
-                {displayPuzzles.filter(puz => profile.solvedPuzzles.includes(puz.id)).length > 0 && (
-                  <div className="mt-3 border-t border-white/5 pt-2">
-                    <button
-                      onClick={() => setShowSolvedPuzzles(!showSolvedPuzzles)}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold text-zinc-500 hover:text-zinc-300 transition-colors select-none outline-none"
-                    >
-                      <span>Solved Puzzles ({displayPuzzles.filter(puz => profile.solvedPuzzles.includes(puz.id)).length})</span>
-                      {showSolvedPuzzles ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    </button>
+                  {/* Collapsible Solved Puzzles Dropdown */}
+                  {displayPuzzles.filter(puz => profile.solvedPuzzles.includes(puz.id)).length > 0 && (
+                    <div className="mt-3 border-t border-white/5 pt-2">
+                      <button
+                        onClick={() => setShowSolvedPuzzles(!showSolvedPuzzles)}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold text-zinc-500 hover:text-zinc-300 transition-colors select-none outline-none"
+                      >
+                        <span>Solved Puzzles ({displayPuzzles.filter(puz => profile.solvedPuzzles.includes(puz.id)).length})</span>
+                        {showSolvedPuzzles ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      </button>
 
-                    {showSolvedPuzzles && (
-                      <div className="mt-1 space-y-1.5 pl-1 animate-fadeIn">
-                        {displayPuzzles.filter(puz => profile.solvedPuzzles.includes(puz.id)).map((puz) => {
-                          const active = activePuzzle.id === puz.id;
-                          return (
-                            <button
-                              key={puz.id}
-                              onClick={() => handleSelectPuzzle(puz)}
-                              className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex justify-between items-center transition-all ${
-                                active
-                                  ? "bg-violet-600/20 text-violet-300 border border-violet-500/20 shadow-inner"
-                                  : "text-zinc-500 hover:text-white hover:bg-white/[0.01]"
-                              }`}
-                            >
-                              <div className="flex flex-col min-w-0 flex-1">
-                                <span className="truncate pr-2 line-through text-zinc-600">{puz.title}</span>
-                                <span className="text-[9px] text-zinc-500 font-normal mt-0.5">
-                                  Solved on {getSolvedDate(profile, puz.id, "puzzle")}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <span className="text-[8px] px-1.5 py-0.5 rounded border border-white/5 bg-black/40 text-zinc-500">
-                                  {puz.category}
-                                </span>
-                                <span className={`text-[8px] px-1.5 py-0.5 rounded border font-semibold ${
-                                  puz.difficulty === "Easy" ? "border-emerald-500/20 text-emerald-400 bg-emerald-500/5" :
-                                  puz.difficulty === "Medium" ? "border-amber-500/20 text-amber-400 bg-amber-500/5" :
-                                  "border-rose-500/20 text-rose-400 bg-rose-500/5"
-                                }`}>
-                                  {puz.difficulty}
-                                </span>
-                                <CheckCircle className="h-4 w-4 text-emerald-400 fill-emerald-500/10 shrink-0" />
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
+                      {showSolvedPuzzles && (
+                        <div className="mt-1 space-y-1.5 pl-1 animate-fadeIn">
+                          {displayPuzzles.filter(puz => profile.solvedPuzzles.includes(puz.id)).map((puz) => {
+                            const active = activePuzzle.id === puz.id;
+                            return (
+                              <button
+                                key={puz.id}
+                                onClick={() => handleSelectPuzzle(puz)}
+                                className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex justify-between items-center transition-all ${
+                                  active
+                                    ? "bg-violet-600/20 text-violet-300 border border-violet-500/20 shadow-inner"
+                                    : "text-zinc-500 hover:text-white hover:bg-white/[0.01]"
+                                }`}
+                              >
+                                <div className="flex flex-col min-w-0 flex-1">
+                                  <span className="truncate pr-2 line-through text-zinc-600">{puz.title}</span>
+                                  <span className="text-[9px] text-zinc-500 font-normal mt-0.5">
+                                    Solved on {getSolvedDate(profile, puz.id, "puzzle")}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span className="text-[8px] px-1.5 py-0.5 rounded border border-white/5 bg-black/40 text-zinc-500">
+                                    {puz.category}
+                                  </span>
+                                  <span className={`text-[8px] px-1.5 py-0.5 rounded border font-semibold ${
+                                    puz.difficulty === "Easy" ? "border-emerald-500/20 text-emerald-400 bg-emerald-500/5" :
+                                    puz.difficulty === "Medium" ? "border-amber-500/20 text-amber-400 bg-amber-500/5" :
+                                    "border-rose-500/20 text-rose-400 bg-rose-500/5"
+                                  }`}>
+                                    {puz.difficulty}
+                                  </span>
+                                  <CheckCircle className="h-4 w-4 text-emerald-400 fill-emerald-500/10 shrink-0" />
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Streaks progress trackers */}
-            <div className="p-5 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm text-center">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-3">Puzzle Solver Streak</span>
-              <div className="flex justify-center items-baseline gap-1 text-white">
-                <span className="text-3xl font-extrabold">{profile.solvedPuzzles.length}</span>
-                <span className="text-zinc-500 text-xs">/ {displayPuzzles.length} completed</span>
+              {/* Part 2: Puzzle Solver Streak */}
+              <div className="pt-4 border-t border-white/5 space-y-2">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Puzzle Solver Streak</span>
+                <div className="flex justify-between items-baseline text-white">
+                  <span className="text-2xl font-extrabold">{profile.solvedPuzzles.length}</span>
+                  <span className="text-zinc-500 text-[10px] font-semibold">{profile.solvedPuzzles.length} / {displayPuzzles.length} completed</span>
+                </div>
+                <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden border border-white/5">
+                  <div
+                    className="h-full bg-gradient-to-r from-orange-500 to-amber-500 transition-all duration-300"
+                    style={{ width: `${(profile.solvedPuzzles.length / displayPuzzles.length) * 100}%` }}
+                  />
+                </div>
               </div>
-              <div className="h-1.5 w-full bg-zinc-800 rounded-full mt-3 overflow-hidden border border-white/5">
-                <div
-                  className="h-full bg-gradient-to-r from-orange-500 to-amber-500 transition-all duration-300"
-                  style={{ width: `${(profile.solvedPuzzles.length / displayPuzzles.length) * 100}%` }}
-                />
+
+              {/* Part 3: AI Coach Brain Teaser Tip */}
+              <div className="p-4 rounded-xl border border-orange-500/10 bg-gradient-to-br from-orange-500/5 to-transparent text-left space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-orange-400" />
+                  <span className="text-[9px] font-bold text-orange-300 uppercase tracking-wider">AI Coach Tip</span>
+                </div>
+                <h4 className="text-[11px] font-bold text-white leading-tight">Mastering Quant Puzzles</h4>
+                <p className="text-[10px] text-zinc-400 leading-relaxed font-semibold">
+                  Elite interviews prioritize your methodology over final answers. Follow these core analytical rules to secure high marks:
+                </p>
+                <ul className="text-[9px] text-zinc-500 space-y-1 pl-3.5 list-disc font-bold">
+                  <li>State variables and constraints out loud.</li>
+                  <li>Solve N = 1, 2 base cases to find patterns.</li>
+                  <li>Use binary/ternary search split state logic.</li>
+                </ul>
               </div>
+
             </div>
           </div>
 
           {/* Right Column: Interactive riddle details (col-span-7) */}
-          <div className="lg:col-span-7 space-y-6">
-            <div className="p-8 rounded-3xl border border-white/5 bg-zinc-900/40 backdrop-blur-md space-y-6 relative overflow-hidden shadow-xl">
+          <div className="lg:col-span-7 h-full">
+            <div className="p-8 rounded-3xl border border-white/5 bg-zinc-900/40 backdrop-blur-md space-y-6 relative overflow-hidden shadow-xl h-full">
               <div className="absolute top-0 right-0 h-32 w-32 bg-orange-600/[0.02] rounded-full blur-2xl pointer-events-none" />
 
               {/* Puzzle Header metadata */}

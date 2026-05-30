@@ -875,7 +875,7 @@ export default function TimedPracticePage() {
         </header>
 
         {/* Outer Dashboard content wrapper */}
-        <div className="p-8 space-y-8 max-w-6xl w-full mx-auto">
+        <div className="lg:p-8 p-4 space-y-8 max-w-6xl w-full mx-auto">
 
           {/* Auto-Solve Success Notification Banner */}
           {autoSolveSuccessMessage && (
