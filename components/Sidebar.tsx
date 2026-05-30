@@ -15,7 +15,9 @@ import {
   Award,
   UserCheck,
   Timer,
-  Settings
+  Settings,
+  Menu,
+  X
 } from "lucide-react";
 import { getLoggedInUser, getUserProfile, UserProfile } from "@/lib/db";
 
@@ -24,6 +26,7 @@ export default function Sidebar() {
   const router = useRouter();
   const [user, setUser] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   useEffect(() => {
     const loggedIn = getLoggedInUser();
@@ -77,7 +80,31 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-20 flex w-72 flex-col border-r border-white/10 bg-zinc-950/80 backdrop-blur-xl text-zinc-100">
+    <>
+      {/* Floating Mobile Hamburger Trigger */}
+      <button
+        onClick={() => setIsMobileOpen(!isMobileOpen)}
+        className="lg:hidden fixed top-3.5 left-4.5 z-30 p-2 rounded-xl border border-white/10 bg-zinc-950/90 text-zinc-300 hover:text-white backdrop-blur-md transition-all shadow-lg active:scale-95 cursor-pointer flex items-center justify-center"
+        aria-label="Toggle Navigation Sidebar"
+      >
+        {isMobileOpen ? (
+          <X className="h-5 w-5" />
+        ) : (
+          <Menu className="h-5 w-5" />
+        )}
+      </button>
+
+      {/* Mobile dim-overlay backdrop */}
+      {isMobileOpen && (
+        <div 
+          onClick={() => setIsMobileOpen(false)}
+          className="lg:hidden fixed inset-0 z-10 bg-black/60 backdrop-blur-sm transition-all"
+        />
+      )}
+
+      <aside className={`fixed inset-y-0 left-0 z-20 flex w-72 flex-col border-r border-white/10 bg-zinc-950/80 backdrop-blur-xl text-zinc-100 transition-transform duration-300 ${
+        isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+      }`}>
       {/* App Branding */}
       <div className="flex h-16 items-center justify-between px-6 border-b border-white/5">
         <Link href="/dashboard" className="flex items-center gap-2.5 group">
@@ -136,6 +163,7 @@ export default function Sidebar() {
             <Link
               key={item.path}
               href={item.path}
+              onClick={() => setIsMobileOpen(false)}
               className={`flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 group relative ${isActive
                 ? "bg-gradient-to-r from-violet-600/20 to-fuchsia-600/5 border-l-4 border-violet-500 text-white shadow-inner"
                 : "text-zinc-400 hover:text-white hover:bg-white/[0.03]"
@@ -163,5 +191,6 @@ export default function Sidebar() {
         </button>
       </div>
     </aside>
+    </>
   );
 }

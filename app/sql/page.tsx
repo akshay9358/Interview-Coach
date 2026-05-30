@@ -683,9 +683,9 @@ export default function SqlPractice() {
       <Sidebar />
 
       {/* Main console content */}
-      <main className="flex-1 pl-72 min-h-screen flex flex-col bg-zinc-950 pb-12">
+      <main className="flex-1 lg:pl-72 pl-0 min-h-screen flex flex-col bg-zinc-950 pb-12">
         {/* Top Header Bar */}
-        <header className="h-16 border-b border-white/5 bg-zinc-950/60 backdrop-blur-md flex items-center justify-between px-8 sticky top-0 z-10">
+        <header className="h-16 border-b border-white/5 bg-zinc-950/60 backdrop-blur-md flex items-center justify-between lg:px-8 px-4 pl-16 sticky top-0 z-10">
           <div>
             <h1 className="text-xl font-bold bg-gradient-to-r from-white via-zinc-100 to-zinc-400 bg-clip-text text-transparent">
               SQL Practices Console
@@ -708,8 +708,8 @@ export default function SqlPractice() {
           <div className="p-5 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm">
             <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-3">Select SQL Problem</label>
             
-            {/* Scrollable list of all problems (shows ~5 items, scroll to see more) */}
-            <div className="space-y-1.5 max-h-[200px] overflow-y-auto pr-1">
+            {/* Scrollable list of all problems (shows ~4 items, scroll to see more) */}
+            <div className="space-y-1.5 max-h-[186px] overflow-y-auto pr-1">
               {/* Unsolved SQL problems */}
               {displayProblems.filter(prob => !profile.solvedSql.includes(prob.id)).map((prob) => {
                 const isActive = activeProblem.id === prob.id;

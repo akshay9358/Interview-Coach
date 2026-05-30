@@ -113,9 +113,9 @@ export default function AnalyticsDashboard() {
       <Sidebar />
 
       {/* Main analytics view */}
-      <main className="flex-1 pl-72 min-h-screen flex flex-col bg-zinc-950 pb-12">
+      <main className="flex-1 lg:pl-72 pl-0 min-h-screen flex flex-col bg-zinc-950 pb-12">
         {/* Top Header Bar */}
-        <header className="h-16 border-b border-white/5 bg-zinc-950/60 backdrop-blur-md flex items-center justify-between px-8 sticky top-0 z-10">
+        <header className="h-16 border-b border-white/5 bg-zinc-950/60 backdrop-blur-md flex items-center justify-between lg:px-8 px-4 pl-16 sticky top-0 z-10">
           <div>
             <h1 className="text-xl font-bold bg-gradient-to-r from-white via-zinc-100 to-zinc-400 bg-clip-text text-transparent">
               Performance Analytics
@@ -125,7 +125,7 @@ export default function AnalyticsDashboard() {
         </header>
 
         {/* Analytics details */}
-        <div className="p-8 space-y-8 max-w-6xl w-full mx-auto">
+        <div className="lg:p-8 p-4 space-y-8 max-w-6xl w-full mx-auto">
 
           {/* Top Row Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">

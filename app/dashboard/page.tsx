@@ -14,7 +14,10 @@ import {
   UserPlus, 
   BookOpen, 
   Check, 
-  Plus
+  Plus,
+  Target,
+  Shuffle,
+  ExternalLink
 } from "lucide-react";
 import { 
   getLoggedInUser, 
@@ -34,6 +37,17 @@ export default function Dashboard() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [customSolveTitle, setCustomSolveTitle] = useState("");
   const [customSolveSuccess, setCustomSolveSuccess] = useState(false);
+  const [dailyChallenge, setDailyChallenge] = useState<any | null>(null);
+
+  const rollDailyChallenge = (currentProfile: UserProfile) => {
+    const unsolved = standardProblems.filter(p => !currentProfile.solvedList.includes(p.id));
+    if (unsolved.length > 0) {
+      const randomIndex = Math.floor(Math.random() * unsolved.length);
+      setDailyChallenge(unsolved[randomIndex]);
+    } else {
+      setDailyChallenge(null);
+    }
+  };
 
   useEffect(() => {
     const user = getLoggedInUser();
@@ -42,6 +56,7 @@ export default function Dashboard() {
       setProfile(uProfile);
       setCfInput(uProfile.cfHandle || "");
       setLcInput(uProfile.lcHandle || "");
+      rollDailyChallenge(uProfile);
     }
   }, []);
 
@@ -143,9 +158,9 @@ export default function Dashboard() {
       <Sidebar />
 
       {/* Main dashboard content */}
-      <main className="flex-1 pl-72 min-h-screen flex flex-col bg-zinc-950 pb-12">
+      <main className="flex-1 lg:pl-72 pl-0 min-h-screen flex flex-col bg-zinc-950 pb-12">
         {/* Top Header Bar */}
-        <header className="h-16 border-b border-white/5 bg-zinc-950/60 backdrop-blur-md flex items-center justify-between px-8 sticky top-0 z-10">
+        <header className="h-16 border-b border-white/5 bg-zinc-950/60 backdrop-blur-md flex items-center justify-between lg:px-8 px-4 pl-16 sticky top-0 z-10">
           <div>
             <h1 className="text-xl font-bold bg-gradient-to-r from-white via-zinc-100 to-zinc-400 bg-clip-text text-transparent">
               Practice Dashboard
@@ -307,40 +322,71 @@ export default function Dashboard() {
 
           {/* Bottom Grid: Quick Solves & Category Progression */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Quick Log Form */}
+            {/* Daily Focus Challenge Card */}
             <div className="lg:col-span-1 p-6 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-md flex flex-col justify-between">
               <div>
                 <h4 className="text-md font-bold text-white mb-2 flex items-center gap-2">
-                  <Plus className="h-5 w-5 text-emerald-400" />
-                  Quick Log Solves
+                  <Target className="h-5 w-5 text-violet-400 animate-pulse" />
+                  Daily Focus Challenge
                 </h4>
-                <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
-                  Solved a question on GeeksforGeeks, HackerRank, or CSES? Log it manually to boost your XP and secure your streak!
+                <p className="text-[11px] text-zinc-500 mb-5 leading-relaxed">
+                  Keep your momentum high! Attempt this handpicked unsolved coding challenge to secure your streak and boost XP.
                 </p>
-                <form onSubmit={handleQuickLog} className="space-y-3">
-                  <input
-                    type="text"
-                    required
-                    value={customSolveTitle}
-                    onChange={(e) => setCustomSolveTitle(e.target.value)}
-                    placeholder="e.g. CSES sorting problem"
-                    className="w-full px-4 py-2.5 rounded-xl border border-white/5 bg-white/[0.02] text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 transition-all"
-                  />
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-all shadow-lg shadow-emerald-600/10"
-                  >
-                    Log Problem Solve
-                  </button>
-                </form>
-              </div>
 
-              {customSolveSuccess && (
-                <div className="mt-4 flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-lg animate-fadeIn">
-                  <Check className="h-4 w-4 shrink-0" />
-                  <span>Logged successfully! XP +15</span>
-                </div>
-              )}
+                {dailyChallenge ? (
+                  <div className="space-y-4 bg-white/[0.01] border border-white/5 p-4 rounded-xl">
+                    <div>
+                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">RECOMMENDED TASK</span>
+                      <h5 className="font-extrabold text-sm text-white line-clamp-2 leading-snug">
+                        {dailyChallenge.title}
+                      </h5>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
+                        dailyChallenge.difficulty === "Easy"
+                          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                          : dailyChallenge.difficulty === "Medium"
+                            ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                            : "bg-rose-500/10 border-rose-500/20 text-rose-400"
+                      }`}>
+                        {dailyChallenge.difficulty}
+                      </span>
+                      <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-violet-500/10 border border-violet-500/20 text-violet-400">
+                        {dailyChallenge.category === "DSA" ? "DSA" : "CP"}
+                      </span>
+                      <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 uppercase tracking-wider">
+                        +20 XP
+                      </span>
+                    </div>
+
+                    <div className="pt-2 flex gap-2">
+                      <a
+                        href={dailyChallenge.problemUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2 px-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-violet-600/15"
+                      >
+                        <span>Solve Problem</span>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                      <button
+                        onClick={() => rollDailyChallenge(profile)}
+                        className="p-2 rounded-xl bg-white/[0.02] border border-white/5 text-zinc-400 hover:text-white hover:bg-white/[0.04] transition-all cursor-pointer"
+                        title="Roll another challenge"
+                      >
+                        <Shuffle className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-5 text-center border border-dashed border-emerald-500/10 bg-emerald-500/[0.02] rounded-xl flex flex-col items-center justify-center">
+                    <CheckCircle className="h-8 w-8 text-emerald-500 mb-2 fill-emerald-500/10" />
+                    <h5 className="text-xs font-bold text-white mb-1">Mastery Achieved!</h5>
+                    <p className="text-[10px] text-zinc-500">All standard DSA & CP problems are solved. Amazing work!</p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Category progression rings */}
