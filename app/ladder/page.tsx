@@ -148,7 +148,7 @@ const PUZZLE_POOL = [
 
 interface AptitudeQuestion {
   id: string;
-  category: "Quantitative" | "Logical" | "Verbal";
+  category: "Quantitative" | "Logical" | "Verbal" | "Technical" | "Behavioral";
   difficulty: "Easy" | "Medium" | "Hard";
   question: string;
   options: string[];
@@ -171,19 +171,19 @@ const APTITUDE_POOL: AptitudeQuestion[] = [
     id: "apt-q-2",
     category: "Quantitative",
     difficulty: "Medium",
-    question: "A, B, and C can do a work in 20, 30, and 60 days respectively. In how many days can A do the work if he is assisted by B and C on every third day?",
-    options: ["12 days", "15 days", "16 days", "18 days"],
-    answer: "15 days",
-    explanation: "A's 1 day work = 1/20. B's = 1/30, C's = 1/60. In 2 days A does = 2/20 = 1/10. On the 3rd day, work done = (1/20 + 1/30 + 1/60) = 6/60 = 1/10. Total work in 3 days = 1/10 + 1/10 = 1/5. Thus, 100% work is done in 3 * 5 = 15 days."
+    question: "A sum of money at compound interest doubles itself in 15 years. It will become eight times of itself in how many years?",
+    options: ["30 years", "40 years", "45 years", "60 years"],
+    answer: "45 years",
+    explanation: "Under compound interest, if a sum becomes 2 times in 15 years, it will become (2)^3 = 8 times in 3 * 15 = 45 years."
   },
   {
     id: "apt-q-3",
     category: "Quantitative",
     difficulty: "Hard",
-    question: "Find the unit digit of the expression 234^100 + 234^101.",
-    options: ["0", "2", "4", "6"],
-    answer: "0",
-    explanation: "For unit digit of 4, the pattern is 4^odd = 4, 4^even = 6. Here 100 is even so 234^100 ends in 6. 101 is odd so 234^101 ends in 4. Sum of unit digits = 6 + 4 = 10, so unit digit is 0."
+    question: "The ratio of work efficiency of A, B, and C is 5:3:8. Working together, they can complete a task in 30 days. In how many days can A and B together complete 60% of the same task?",
+    options: ["30 days", "36 days", "40 days", "48 days"],
+    answer: "36 days",
+    explanation: "Total efficiency = 5 + 3 + 8 = 16. Total work = 16 * 30 = 480. 60% of total work = 480 * 0.60 = 288. Combined efficiency of A and B = 5 + 3 = 8. Days required by A and B = 288 / 8 = 36 days."
   },
   
   // Logical Reasoning
@@ -191,28 +191,28 @@ const APTITUDE_POOL: AptitudeQuestion[] = [
     id: "apt-l-1",
     category: "Logical",
     difficulty: "Easy",
-    question: "Look at this series: 2, 1, (1/2), (1/4), ... What number should come next?",
-    options: ["(1/3)", "(1/8)", "(2/8)", "(1/16)"],
-    answer: "(1/8)",
-    explanation: "This is a simple division series; each number is one-half of the previous number. Half of 1/4 is 1/8."
+    question: "Find the missing number in the sequence: 4, 9, 20, 43, 90, ___.",
+    options: ["180", "183", "185", "189"],
+    answer: "185",
+    explanation: "The pattern is: (Previous Number * 2) + K, where K increments by 1 in each step. 4*2+1=9; 9*2+2=20; 20*2+3=43; 43*2+4=90; 90*2+5=185."
   },
   {
     id: "apt-l-2",
     category: "Logical",
     difficulty: "Medium",
-    question: "Pointing to a photograph, Vipul said, 'She is the daughter of my grandfather's only son.' How is Vipul related to the girl in the photograph?",
-    options: ["Father", "Brother", "Cousin", "Uncle"],
-    answer: "Brother",
-    explanation: "Grandfather's only son is Vipul's father. The girl is the daughter of Vipul's father, which makes her Vipul's sister. Consequently, Vipul is her brother."
+    question: "Six friends A, B, C, D, E, and F are sitting in a circle facing the center. F is to the immediate left of A. B is opposite E. C is between A and B. Who is to the immediate right of F?",
+    options: ["A", "B", "D", "E"],
+    answer: "D",
+    explanation: "Arranging them in a circle facing inside: F is to the left of A. C is between A and B. B is opposite E. This leaves D to sit between E and F. Facing the center, the person to the immediate right of F is D."
   },
   {
     id: "apt-l-3",
     category: "Logical",
     difficulty: "Hard",
-    question: "In a code, 'COLD' is written as 'DPME' and 'HOT' is written as 'IPU'. How is 'SUMMER' written?",
-    options: ["TVNNFS", "TVNNSF", "TUMMER", "RTLMDQ"],
-    answer: "TVNNFS",
-    explanation: "Each letter is shifted by +1 in alphabetical order. S->T, U->V, M->N, M->N, E->F, R->S. Hence, TVNNFS."
+    question: "Consider statements: 'All painters are artists.' 'Some artists are writers.' 'No writers are singers.' Which conclusions are valid? (I: Some artists are painters. II: Some singers are painters. III: No singer is a writer.)",
+    options: ["Only conclusion I", "Only conclusions I and II", "Only conclusions I and III", "All conclusions follow"],
+    answer: "Only conclusions I and III",
+    explanation: "All painters are artists, so some artists are definitely painters (I is valid). No writer is a singer, so no singer is a writer (III is valid by direct contrapositive). No link exists between singers and painters, so II is invalid."
   },
 
   // Verbal Ability
@@ -220,33 +220,106 @@ const APTITUDE_POOL: AptitudeQuestion[] = [
     id: "apt-v-1",
     category: "Verbal",
     difficulty: "Easy",
-    question: "Choose the synonym of 'ABANDON':",
-    options: ["Keep", "Forsake", "Adopt", "Cherish"],
-    answer: "Forsake",
-    explanation: "To abandon means to leave completely or desert. Forsake is its direct synonym."
+    question: "Choose the word opposite in meaning (Antonym) to 'BENEVOLENT':",
+    options: ["Generous", "Malevolent", "Sympathetic", "Affable"],
+    answer: "Malevolent",
+    explanation: "Benevolent means kind-hearted, well-meaning, or generous. Its antonym is malevolent, which means wishing evil or harm to others."
   },
   {
     id: "apt-v-2",
     category: "Verbal",
     difficulty: "Medium",
-    question: "Identify the grammatically correct sentence:",
-    options: [
-      "Neither of the two candidates were selected.",
-      "Neither of the two candidates was selected.",
-      "Each of the boys have their own book.",
-      "The news are very shocking."
-    ],
-    answer: "Neither of the two candidates was selected.",
-    explanation: "'Neither' is a singular pronoun and takes a singular verb ('was'). 'Each' also takes a singular verb ('has'). 'News' is singular despite ending in s."
+    question: "Identify the grammatically incorrect section of the sentence: 'The team was (1) / having a dispute (2) / among themselves (3) / about the design (4).'",
+    options: ["Section 1 ('was')", "Section 2 ('having a dispute')", "Section 3 ('among themselves')", "Section 4 ('about the design')"],
+    answer: "Section 1 ('was')",
+    explanation: "When a collective noun like 'team' refers to members acting individually or disagreeing ('among themselves'), it takes a plural verb. 'was' must be corrected to 'were'."
   },
   {
     id: "apt-v-3",
     category: "Verbal",
     difficulty: "Hard",
-    question: "Fill in the blank: The manager was so ________ in his instructions that no one had any doubts about the project.",
-    options: ["ambiguous", "lucid", "redundant", "verbose"],
-    answer: "lucid",
-    explanation: "'Lucid' means clear and easy to understand. Since 'no one had any doubts', the instructions must have been very clear (lucid)."
+    question: "Rearrange the sentences (P, Q, R, S) into a coherent paragraph: (P) In the long run, this builds immense cognitive resilience. (Q) Reading regularly stimulates synaptic pathways in the brain. (R) It also broadens vocabulary and critical thinking. (S) Consequently, active readers score higher on analytical tasks.",
+    options: ["Q - R - P - S", "Q - P - R - S", "R - Q - S - P", "P - S - Q - R"],
+    answer: "Q - R - P - S",
+    explanation: "Q introduces the primary topic (reading and brain stimulation). R adds a secondary immediate benefit ('It also...'). P explains the long-term cognitive consequence. S concludes with the ultimate result ('Consequently...')."
+  },
+
+  // Technical & Coding Tests
+  {
+    id: "apt-t-1",
+    category: "Technical",
+    difficulty: "Easy",
+    question: "In a SQL database table 'Orders', which query correctly retrieves the total number of orders placed by customer_id '102'?",
+    options: [
+      "SELECT SUM(*) FROM Orders WHERE customer_id = 102;",
+      "SELECT COUNT(*) FROM Orders WHERE customer_id = 102;",
+      "SELECT COUNT(customer_id) FROM Orders GROUP BY customer_id = 102;",
+      "SELECT COUNT(*) FROM Orders HAVING customer_id = 102;"
+    ],
+    answer: "SELECT COUNT(*) FROM Orders WHERE customer_id = 102;",
+    explanation: "To retrieve the total count of rows satisfying a condition in a simple query, COUNT(*) with a WHERE clause is correct, standard, and highly efficient."
+  },
+  {
+    id: "apt-t-2",
+    category: "Technical",
+    difficulty: "Medium",
+    question: "Analyze this recursion snippet: `int fn(int n) { if (n <= 1) return 1; return n * fn(n - 2); }`. What is the value of `fn(5)`?",
+    options: ["15", "24", "120", "150"],
+    answer: "15",
+    explanation: "Trace: fn(5) = 5 * fn(3). fn(3) = 3 * fn(1). Since 1 <= 1, fn(1) = 1. Therefore, fn(5) = 5 * 3 * 1 = 15."
+  },
+  {
+    id: "apt-t-3",
+    category: "Technical",
+    difficulty: "Hard",
+    question: "What is the worst-case time complexity of searching an element in a binary search tree (BST) that is completely unbalanced (skewed)?",
+    options: ["O(1)", "O(log N)", "O(N)", "O(N log N)"],
+    answer: "O(N)",
+    explanation: "In a completely unbalanced (skewed) BST, the tree structure collapses into a linear linked list. Finding an element requires traversing all nodes, resulting in O(N) worst-case time complexity."
+  },
+
+  // Behavioral & Case Study Rounds
+  {
+    id: "apt-b-1",
+    category: "Behavioral",
+    difficulty: "Easy",
+    question: "A colleague disagrees with your technical design proposal during a team review. Which response best exhibits high emotional intelligence and teamwork?",
+    options: [
+      "Defend your design aggressively and point out potential flaws in their past work.",
+      "Acknowledge their feedback, ask them to explain their perspective, and work together to compare structural trade-offs.",
+      "Ignore their objections and appeal directly to the manager to override their opinion.",
+      "Politely tell them that your proposal has already been approved and cannot be changed."
+    ],
+    answer: "Acknowledge their feedback, ask them to explain their perspective, and work together to compare structural trade-offs.",
+    explanation: "High EQ in engineering involves seeking understanding, fostering collaboration, and objectifying decisions by evaluating design trade-offs together."
+  },
+  {
+    id: "apt-b-2",
+    category: "Behavioral",
+    difficulty: "Medium",
+    question: "Using the STAR method to describe overcoming a project delay, which detail represents the 'Result' in a structured response?",
+    options: [
+      "Our backend database integration was delayed by 2 weeks due to third-party vendor downtime.",
+      "I scheduled daily stand-ups and decoupled the frontend work so tasks could run in parallel.",
+      "My primary objective was to refactor the payment gateway and minimize user checkout latency.",
+      "We shipped the software 2 days ahead of the rescheduled deadline with 0 critical bugs, raising conversion rates by 8%."
+    ],
+    answer: "We shipped the software 2 days ahead of the rescheduled deadline with 0 critical bugs, raising conversion rates by 8%.",
+    explanation: "In STAR, the 'Result' must quantify achievements, project outcomes, and business impact to demonstrate successful problem-solving and value delivery."
+  },
+  {
+    id: "apt-b-3",
+    category: "Behavioral",
+    difficulty: "Hard",
+    question: "A mobile app's onboarding registration screen has an A/B test running. Variation B has 2 fewer form fields and shows a 30% higher completion rate, but downstream user retention drops by 15%. What is the best product recommendation?",
+    options: [
+      "Adopt Variation B immediately because a 30% increase in signups always overrides later retention drops.",
+      "Reject Variation B because retention is the only metric that matters for a long-term product lifecycle.",
+      "Investigate Variation B's input deletions; key setup inputs may have been removed, leading to poor user onboarding alignment.",
+      "Rerun the A/B test for another year to gather more volume and bypass statistical significance limits."
+    ],
+    answer: "Investigate Variation B's input deletions; key setup inputs may have been removed, leading to poor user onboarding alignment.",
+    explanation: "A drop in retention despite higher signup volumes indicates the friction removed was crucial for user alignment, value setup, or accounts qualification."
   }
 ];
 
@@ -298,7 +371,9 @@ export default function SmartLadderPage() {
   const [aptitudeDifficulties, setAptitudeDifficulties] = useState<Record<string, "Easy" | "Medium" | "Hard">>({
     "Quantitative": "Medium",
     "Logical": "Medium",
-    "Verbal": "Medium"
+    "Verbal": "Medium",
+    "Technical": "Medium",
+    "Behavioral": "Medium"
   });
 
   // Exam Mode Simulator States
@@ -317,6 +392,8 @@ export default function SmartLadderPage() {
     quantMastery: 0,
     logicMastery: 0,
     verbalMastery: 0,
+    technicalMastery: 0,
+    behavioralMastery: 0,
     averageSpeedSec: 0,
     dailyHistory: {
       "Sun": { solved: 0, correct: 0 },
@@ -571,7 +648,7 @@ export default function SmartLadderPage() {
       if (uProf.solvedPuzzleAnswers?.["aptitude_daily_set"]) {
         try {
           const parsedSet = JSON.parse(uProf.solvedPuzzleAnswers["aptitude_daily_set"]);
-          if (Array.isArray(parsedSet) && parsedSet.length === 3) {
+          if (Array.isArray(parsedSet) && parsedSet.length >= 3) {
             setAptitudeSet(parsedSet);
             dailySetLoaded = true;
           }
@@ -581,14 +658,14 @@ export default function SmartLadderPage() {
       if (!dailySetLoaded) {
         // Generate daily set from current difficulties
         const freshSet: AptitudeQuestion[] = [];
-        let diffs = { "Quantitative": "Medium" as const, "Logical": "Medium" as const, "Verbal": "Medium" as const };
+        let diffs = { "Quantitative": "Medium" as const, "Logical": "Medium" as const, "Verbal": "Medium" as const, "Technical": "Medium" as const, "Behavioral": "Medium" as const };
         if (uProf.solvedPuzzleAnswers?.["aptitude_difficulties"]) {
           try {
             diffs = JSON.parse(uProf.solvedPuzzleAnswers["aptitude_difficulties"]);
           } catch (e) {}
         }
           
-        (["Quantitative", "Logical", "Verbal"] as const).forEach(cat => {
+        (["Quantitative", "Logical", "Verbal", "Technical", "Behavioral"] as const).forEach(cat => {
           const targetDiff = diffs[cat] || "Medium";
           const pool = APTITUDE_POOL.filter(q => q.category === cat && q.difficulty === targetDiff);
           const selected = pool[Math.floor(Math.random() * pool.length)] || APTITUDE_POOL.find(q => q.category === cat) || APTITUDE_POOL[0];
@@ -1043,7 +1120,9 @@ export default function SmartLadderPage() {
     const masteryKeyMap = {
       "Quantitative": "quantMastery",
       "Logical": "logicMastery",
-      "Verbal": "verbalMastery"
+      "Verbal": "verbalMastery",
+      "Technical": "technicalMastery",
+      "Behavioral": "behavioralMastery"
     } as const;
     const key = masteryKeyMap[q.category];
     if (isCorrect) {
@@ -1152,8 +1231,8 @@ export default function SmartLadderPage() {
 
   // Exam simulator trigger
   const startExamCompany = (company: "Infosys" | "TCS" | "IBM" | "FAANG") => {
-    const qCountMap = { Infosys: 5, TCS: 6, IBM: 4, FAANG: 6 };
-    const timeMap = { Infosys: 600, TCS: 720, IBM: 480, FAANG: 900 }; // seconds
+    const qCountMap = { Infosys: 10, TCS: 12, IBM: 8, FAANG: 12 };
+    const timeMap = { Infosys: 1800, TCS: 2100, IBM: 1200, FAANG: 2400 }; // seconds
 
     const count = qCountMap[company];
     const seconds = timeMap[company];
@@ -1201,10 +1280,12 @@ export default function SmartLadderPage() {
     currentStats.solvedCount += questions.length;
     currentStats.correctCount += correct;
 
-    // Sync cumulative accuracy averages to mastery scores
+    // Sync cumulative accuracy averages to mastery scores across all 5 domains
     currentStats.quantMastery = Math.min(100, Math.round(currentStats.quantMastery + (scorePct * 10)));
     currentStats.logicMastery = Math.min(100, Math.round(currentStats.logicMastery + (scorePct * 10)));
     currentStats.verbalMastery = Math.min(100, Math.round(currentStats.verbalMastery + (scorePct * 10)));
+    currentStats.technicalMastery = Math.min(100, Math.round(currentStats.technicalMastery + (scorePct * 10)));
+    currentStats.behavioralMastery = Math.min(100, Math.round(currentStats.behavioralMastery + (scorePct * 10)));
 
     setAptStats(currentStats);
     setExamScore(correct);
@@ -1212,7 +1293,7 @@ export default function SmartLadderPage() {
     setExamFinished(true);
 
     // Save actual completed exam record in simulation history list
-    const timeMap = { Infosys: 600, TCS: 720, IBM: 480, FAANG: 900 };
+    const timeMap = { Infosys: 1800, TCS: 2100, IBM: 1200, FAANG: 2400 };
     const totalSecs = examCompany ? timeMap[examCompany] : 600;
     const elapsedSecs = totalSecs - examTimeRemaining;
     const elapsedMins = Math.floor(elapsedSecs / 60);
@@ -2439,10 +2520,10 @@ export default function SmartLadderPage() {
                             >
                               <span className="font-extrabold text-xs tracking-wide group-hover:scale-105 transition-all">{company}</span>
                               <span className="text-[9px] text-zinc-500 font-bold uppercase">
-                                {company === "Infosys" ? "10m • 5 Qs" :
-                                 company === "TCS" ? "12m • 6 Qs" :
-                                 company === "IBM" ? "8m • 4 Qs" :
-                                 "15m • 6 Qs"}
+                                {company === "Infosys" ? "30m • 10 Qs" :
+                                 company === "TCS" ? "35m • 12 Qs" :
+                                 company === "IBM" ? "20m • 8 Qs" :
+                                 "40m • 12 Qs"}
                               </span>
                             </button>
                           ))}
@@ -2718,6 +2799,34 @@ export default function SmartLadderPage() {
                           />
                         </div>
                       </div>
+
+                      {/* Technical */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-[11px] font-bold text-zinc-400">
+                          <span className="uppercase tracking-wider">Technical & Coding</span>
+                          <span className="text-white">{aptStats.technicalMastery || 0}%</span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-zinc-900 border border-white/5 overflow-hidden">
+                          <div 
+                            className="h-full bg-amber-500 rounded-full transition-all duration-500" 
+                            style={{ width: `${(aptStats.technicalMastery || 0)}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Behavioral */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-[11px] font-bold text-zinc-400">
+                          <span className="uppercase tracking-wider">Behavioral & Cases</span>
+                          <span className="text-white">{aptStats.behavioralMastery || 0}%</span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-zinc-900 border border-white/5 overflow-hidden">
+                          <div 
+                            className="h-full bg-rose-500 rounded-full transition-all duration-500" 
+                            style={{ width: `${(aptStats.behavioralMastery || 0)}%` }}
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -2817,6 +2926,8 @@ export default function SmartLadderPage() {
                                 { name: "Quantitative", mastery: aptStats.quantMastery },
                                 { name: "Logical", mastery: aptStats.logicMastery },
                                 { name: "Verbal", mastery: aptStats.verbalMastery },
+                                { name: "Technical", mastery: aptStats.technicalMastery || 0 },
+                                { name: "Behavioral", mastery: aptStats.behavioralMastery || 0 },
                               ];
                               const weakest = cats.reduce((a, b) => a.mastery <= b.mastery ? a : b);
                               const strongest = cats.reduce((a, b) => a.mastery >= b.mastery ? a : b);
