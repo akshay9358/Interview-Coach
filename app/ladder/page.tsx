@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { 
   Sparkles, 
   Flame, 
@@ -358,11 +358,19 @@ export default function SmartLadderPage() {
   useEffect(() => {
     const user = getLoggedInUser();
 
-    // Restore persisted active tab selection
+    // Restore persisted active tab selection — URL param takes priority over localStorage
     if (typeof window !== "undefined") {
-      const persistedTab = localStorage.getItem("ic_active_ladder_tab");
-      if (persistedTab && ["ladder", "daily", "behavioral", "aptitude"].includes(persistedTab)) {
-        setActiveTab(persistedTab as any);
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlTab = urlParams.get("tab");
+      if (urlTab && ["ladder", "daily", "behavioral", "aptitude"].includes(urlTab)) {
+        setActiveTab(urlTab as any);
+        // Clear the URL param so it doesn't persist on manual tab changes
+        window.history.replaceState({}, "", window.location.pathname);
+      } else {
+        const persistedTab = localStorage.getItem("ic_active_ladder_tab");
+        if (persistedTab && ["ladder", "daily", "behavioral", "aptitude"].includes(persistedTab)) {
+          setActiveTab(persistedTab as any);
+        }
       }
     }
 
@@ -520,7 +528,37 @@ export default function SmartLadderPage() {
       // Load aptitude stats and daily set
       if (uProf.solvedPuzzleAnswers?.["aptitude_stats"]) {
         try {
-          setAptStats(JSON.parse(uProf.solvedPuzzleAnswers["aptitude_stats"]));
+          const parsed = JSON.parse(uProf.solvedPuzzleAnswers["aptitude_stats"]);
+          // Ensure dailyHistory exists (for profiles saved before this feature)
+          if (!parsed.dailyHistory) {
+            parsed.dailyHistory = {
+              Sun: { solved: 0, correct: 0 },
+              Mon: { solved: 0, correct: 0 },
+              Tue: { solved: 0, correct: 0 },
+              Wed: { solved: 0, correct: 0 },
+              Thu: { solved: 0, correct: 0 },
+              Fri: { solved: 0, correct: 0 },
+              Sat: { solved: 0, correct: 0 },
+            };
+          }
+          // Backfill today's data if solves occurred before dailyHistory tracking was added
+          // (i.e. today shows 0 but there are recorded solvedCount > 0)
+          const DAY_KEYS_INIT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+          const todayKeyInit = DAY_KEYS_INIT[new Date().getDay()];
+          if (!parsed.dailyHistory[todayKeyInit]) {
+            parsed.dailyHistory[todayKeyInit] = { solved: 0, correct: 0 };
+          }
+          const todayEntry = parsed.dailyHistory[todayKeyInit];
+          if (todayEntry.solved === 0 && parsed.solvedCount > 0) {
+            // Backfill: assume all existing solves happened today
+            // (conservative: at minimum reflect what we know)
+            todayEntry.solved = parsed.solvedCount;
+            todayEntry.correct = parsed.correctCount;
+            // Persist the backfill so it survives reloads
+            uProf.solvedPuzzleAnswers!["aptitude_stats"] = JSON.stringify(parsed);
+            saveUserProfile(uProf);
+          }
+          setAptStats(parsed);
         } catch (e) {}
       }
       if (uProf.solvedPuzzleAnswers?.["aptitude_difficulties"]) {
@@ -1014,6 +1052,29 @@ export default function SmartLadderPage() {
       currentStats[key] = Math.max(0, currentStats[key] - 4);
     }
 
+    // Update daily history for solved and correct counts
+    // Use getDay() array indexing — reliable across all browser locales
+    const DAY_KEYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const todayKey = DAY_KEYS[new Date().getDay()];
+    if (!currentStats.dailyHistory) {
+      currentStats.dailyHistory = {
+        Sun: { solved: 0, correct: 0 },
+        Mon: { solved: 0, correct: 0 },
+        Tue: { solved: 0, correct: 0 },
+        Wed: { solved: 0, correct: 0 },
+        Thu: { solved: 0, correct: 0 },
+        Fri: { solved: 0, correct: 0 },
+        Sat: { solved: 0, correct: 0 },
+      };
+    }
+    // Ensure the specific day entry always exists before incrementing
+    if (!currentStats.dailyHistory[todayKey]) {
+      currentStats.dailyHistory[todayKey] = { solved: 0, correct: 0 };
+    }
+    currentStats.dailyHistory[todayKey].solved += 1;
+    if (isCorrect) {
+      currentStats.dailyHistory[todayKey].correct += 1;
+    }
     setAptStats(currentStats);
 
     if (!uProf.solvedPuzzleAnswers) uProf.solvedPuzzleAnswers = {};
@@ -2543,6 +2604,67 @@ export default function SmartLadderPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Solved Aptitude History — fills remaining space in left column */}
+                  <div className="p-6 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm space-y-4 flex-1 flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4.5 w-4.5 text-emerald-400" />
+                      <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Solved Aptitude History</h3>
+                    </div>
+
+                    {(() => {
+                      // Build solved history from profile.solvedPuzzleAnswers cross-referenced with APTITUDE_POOL
+                      const solvedItems = APTITUDE_POOL.filter(
+                        q => profile?.solvedPuzzleAnswers?.[q.id]
+                      ).map(q => ({
+                        ...q,
+                        userAnswer: profile!.solvedPuzzleAnswers![q.id],
+                        isCorrect: profile!.solvedPuzzleAnswers![q.id] === q.answer,
+                      }));
+
+                      if (solvedItems.length === 0) {
+                        return (
+                          <div className="text-center py-6 flex-1 flex flex-col justify-center items-center">
+                            <p className="text-[11px] font-bold text-zinc-400">No aptitude solves recorded yet</p>
+                            <p className="text-[9px] text-zinc-500 max-w-xs leading-relaxed mt-1">
+                              Answer questions from the Daily AI‑generated set above — your solved history will appear here automatically.
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1 flex-1">
+                          {solvedItems.map((item, idx) => (
+                            <div key={item.id} className="flex items-start gap-3 p-3 rounded-xl border border-white/[0.03] bg-black/20 hover:bg-black/30 transition-all">
+                              <div className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 text-[10px] font-extrabold ${
+                                item.isCorrect
+                                  ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                                  : "bg-rose-500/10 border border-rose-500/20 text-rose-400"
+                              }`}>
+                                {item.isCorrect ? "✓" : "✗"}
+                              </div>
+                              <div className="flex-1 min-w-0 space-y-0.5">
+                                <p className="text-[11px] font-semibold text-zinc-300 leading-snug line-clamp-2">{item.question}</p>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${
+                                    item.category === "Quantitative" ? "bg-violet-500/10 border border-violet-500/20 text-violet-400"
+                                    : item.category === "Logical" ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                                    : "bg-sky-500/10 border border-sky-500/20 text-sky-400"
+                                  }`}>{item.category}</span>
+                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${
+                                    item.difficulty === "Easy" ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                                    : item.difficulty === "Medium" ? "bg-amber-500/10 border border-amber-500/20 text-amber-400"
+                                    : "bg-rose-500/10 border border-rose-500/20 text-rose-400"
+                                  }`}>{item.difficulty}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
 
                 {/* Right Column (Domain Progress & Trends) */}
@@ -2610,29 +2732,31 @@ export default function SmartLadderPage() {
                     <div className="h-[200px] w-full mt-2 select-none pr-3 pt-2">
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart
-                          data={[
-                            { day: "Mon", accuracy: aptStats.correctCount > 0 ? 45 : 0 },
-                            { day: "Tue", accuracy: aptStats.correctCount > 0 ? 55 : 0 },
-                            { day: "Wed", accuracy: aptStats.correctCount > 0 ? 50 : 0 },
-                            { day: "Thu", accuracy: aptStats.correctCount > 0 ? Math.min(100, Math.round(aptStats.quantMastery * 0.9)) : 0 },
-                            { day: "Fri", accuracy: aptStats.correctCount > 0 ? Math.min(100, Math.round(aptStats.logicMastery * 0.95)) : 0 },
-                            { day: "Sat", accuracy: aptStats.correctCount > 0 ? Math.min(100, Math.round((aptStats.quantMastery + aptStats.logicMastery + aptStats.verbalMastery) / 3)) : 0 }
-                          ]}
+                          data={["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(day => ({
+                            day,
+                            Solved: (aptStats.dailyHistory?.[day]?.solved) || 0,
+                            Correct: (aptStats.dailyHistory?.[day]?.correct) || 0,
+                          }))}
                           margin={{ top: 5, right: 5, left: -25, bottom: 5 }}
                         >
                           <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" />
                           <XAxis dataKey="day" stroke="#a1a1aa" fontSize={9} />
-                          <YAxis stroke="#a1a1aa" fontSize={9} domain={[0, 100]} />
+                          <YAxis stroke="#a1a1aa" fontSize={9} allowDecimals={false} />
                           <ChartTooltip 
                             contentStyle={{ backgroundColor: "#09090b", borderColor: "#ffffff10", borderRadius: "12px" }}
                             labelStyle={{ color: "#a1a1aa", fontSize: "10px", fontWeight: "bold" }}
-                            itemStyle={{ color: "#8b5cf6", fontSize: "10px", fontWeight: "bold" }}
+                            itemStyle={{ fontSize: "10px", fontWeight: "bold" }}
                           />
-                          <Area type="monotone" dataKey="accuracy" stroke="#8b5cf6" strokeWidth={2} fillOpacity={0.15} fill="url(#colorApt)" />
+                          <Area type="monotone" dataKey="Solved" stroke="#8b5cf6" strokeWidth={2} fillOpacity={0.15} fill="url(#colorApt)" />
+                          <Area type="monotone" dataKey="Correct" stroke="#10b981" strokeWidth={2} fillOpacity={0.10} fill="url(#colorAptCorrect)" />
                           <defs>
                             <linearGradient id="colorApt" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
                               <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.0}/>
+                            </linearGradient>
+                            <linearGradient id="colorAptCorrect" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#10b981" stopOpacity={0.25}/>
+                              <stop offset="95%" stopColor="#10b981" stopOpacity={0.0}/>
                             </linearGradient>
                           </defs>
                         </AreaChart>
@@ -2677,14 +2801,46 @@ export default function SmartLadderPage() {
                             </p>
                           </div>
                         ) : (
-                          <div>
+                          <div className="space-y-2.5">
                             <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest block">AI Coach Focus Areas</span>
                             <h4 className="font-bold text-xs text-white">Speed & Precision Strategy</h4>
-                            <p className="text-[10px] text-zinc-400 leading-relaxed font-medium pt-1">
+                            <p className="text-[10px] text-zinc-400 leading-relaxed font-medium">
                               You solved <strong>Verbal Ability</strong> questions 15% faster than Quantitative ones.
+                              {aptStats.correctCount > 0 && aptStats.solvedCount > 0 && (
+                                <> Your overall accuracy is <strong className="text-emerald-400">{Math.round((aptStats.correctCount / aptStats.solvedCount) * 100)}%</strong> across {aptStats.solvedCount} attempts.</>
+                              )}
                             </p>
-                            <p className="text-[10px] text-zinc-500 leading-normal font-medium border-t border-emerald-500/10 pt-2.5 mt-2.5">
+
+                            {/* Weakest category insight */}
+                            {(() => {
+                              const cats = [
+                                { name: "Quantitative", mastery: aptStats.quantMastery },
+                                { name: "Logical", mastery: aptStats.logicMastery },
+                                { name: "Verbal", mastery: aptStats.verbalMastery },
+                              ];
+                              const weakest = cats.reduce((a, b) => a.mastery <= b.mastery ? a : b);
+                              const strongest = cats.reduce((a, b) => a.mastery >= b.mastery ? a : b);
+                              return (
+                                <div className="grid grid-cols-2 gap-2 pt-1">
+                                  <div className="p-2 rounded-lg border border-rose-500/10 bg-rose-500/[0.02]">
+                                    <span className="text-[8px] font-bold text-rose-400 uppercase tracking-widest block mb-0.5">Weakest Area</span>
+                                    <span className="text-[11px] font-bold text-white">{weakest.name}</span>
+                                    <span className="text-[9px] text-zinc-500 block">{weakest.mastery}% mastery</span>
+                                  </div>
+                                  <div className="p-2 rounded-lg border border-emerald-500/10 bg-emerald-500/[0.02]">
+                                    <span className="text-[8px] font-bold text-emerald-400 uppercase tracking-widest block mb-0.5">Strongest Area</span>
+                                    <span className="text-[11px] font-bold text-white">{strongest.name}</span>
+                                    <span className="text-[9px] text-zinc-500 block">{strongest.mastery}% mastery</span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            <p className="text-[10px] text-zinc-500 leading-normal font-medium border-t border-emerald-500/10 pt-2.5 mt-1">
                               💡 <em>Focus on Quantitative speed drills using unit-digit and cycle-check shortcuts to cut solving latency down by 10s.</em>
+                            </p>
+                            <p className="text-[10px] text-zinc-500 leading-normal font-medium">
+                              🎯 <em>Try mock exams under time pressure — candidates who simulate real conditions score 20–30% higher in placement rounds.</em>
                             </p>
                           </div>
                         )}

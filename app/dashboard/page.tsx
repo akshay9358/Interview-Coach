@@ -497,7 +497,7 @@ export default function Dashboard() {
               </p>
             </div>
             <a
-              href="/ladder"
+              href="/ladder?tab=ladder"
               className="shrink-0 bg-violet-600 hover:bg-violet-500 border border-violet-500/20 px-4 py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-lg shadow-violet-600/10 hover:shadow-violet-600/20 cursor-pointer text-center select-none"
             >
               Generate Targeted Ladder
