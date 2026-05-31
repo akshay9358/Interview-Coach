@@ -40,7 +40,7 @@ import { getLoggedInUser, getUserProfile, saveUserProfile, getLocalTodayStr, Use
 import { PracticeProblem } from "@/lib/apiSync";
 import { SqlProblem } from "@/lib/sqlPracticeData";
 import { Puzzle as PuzzleType } from "@/lib/puzzleData";
-import { generateDynamicAptitudeQuestion } from "@/lib/aptitudeGenerator";
+import { generateDynamicAptitudeQuestion, generateCloudAptitudeQuestionsBatch } from "@/lib/aptitudeGenerator";
 
 interface LadderProblem {
   id: string;
@@ -396,6 +396,8 @@ export default function SmartLadderPage() {
   const [examFinished, setExamFinished] = useState(false);
   const [examScore, setExamScore] = useState(0);
   const [examPaused, setExamPaused] = useState(false);
+  const [isExamCloudGenerated, setIsExamCloudGenerated] = useState<boolean | null>(null);
+  const [examLoading, setExamLoading] = useState<boolean>(false);
 
   // Aptitude Cumulative Stats (hydrated from/saved to profile.solvedPuzzleAnswers)
   const [aptStats, setAptStats] = useState({
@@ -1344,15 +1346,41 @@ export default function SmartLadderPage() {
 
       const currentDiff = aptitudeDifficulties[q.category] || "Medium";
 
-      // Filter the pool of this category and difficulty for questions that have NOT been solved/attempted by the user yet
-      let pool = APTITUDE_POOL.filter(
+      // 1. Try to retrieve from the Hugging Face AI-generated pool saved in profile first
+      let pool: AptitudeQuestion[] = [];
+      let aiPool: AptitudeQuestion[] = [];
+      if (currentProfile.solvedPuzzleAnswers && currentProfile.solvedPuzzleAnswers["ai_aptitude_pool"]) {
+        try {
+          aiPool = JSON.parse(currentProfile.solvedPuzzleAnswers["ai_aptitude_pool"]);
+        } catch (e) {}
+      }
+
+      pool = aiPool.filter(
         item => item.category === q.category &&
         item.difficulty === currentDiff &&
         !currentProfile.solvedPuzzles.includes(item.id) &&
         !(currentProfile.solvedPuzzleAnswers && currentProfile.solvedPuzzleAnswers[item.id])
       );
 
+      // 2. Fallback to hardcoded static pool if AI pool has no matching unsolved questions
+      if (pool.length === 0) {
+        pool = APTITUDE_POOL.filter(
+          item => item.category === q.category &&
+          item.difficulty === currentDiff &&
+          !currentProfile.solvedPuzzles.includes(item.id) &&
+          !(currentProfile.solvedPuzzleAnswers && currentProfile.solvedPuzzleAnswers[item.id])
+        );
+      }
+
       // If pool is empty, relax the difficulty filter
+      if (pool.length === 0) {
+        pool = aiPool.filter(
+          item => item.category === q.category &&
+          !currentProfile.solvedPuzzles.includes(item.id) &&
+          !(currentProfile.solvedPuzzleAnswers && currentProfile.solvedPuzzleAnswers[item.id])
+        );
+      }
+
       if (pool.length === 0) {
         pool = APTITUDE_POOL.filter(
           item => item.category === q.category &&
@@ -1363,7 +1391,7 @@ export default function SmartLadderPage() {
 
       let nextQ: AptitudeQuestion;
       if (pool.length === 0) {
-        // If still empty (user has solved absolutely all static questions in this category),
+        // If still empty (user has solved absolutely all static + AI pool questions in this category),
         // generate a new custom high-quality dynamic question on the fly so we NEVER run out!
         nextQ = generateDynamicAptitudeQuestion(q.category, currentDiff);
       } else {
@@ -1426,27 +1454,153 @@ export default function SmartLadderPage() {
     }
   };
 
-  // Exam simulator trigger
-  const startExamCompany = (company: "Infosys" | "TCS" | "IBM" | "FAANG") => {
+  const [isAIPoolGenerating, setIsAIPoolGenerating] = useState(false);
+
+  // Bulk generate 50 AI questions in the cloud using Hugging Face Serverless API
+  const handleBulkGenerateAIQuestions = async () => {
+    if (!profile) return;
+    setIsAIPoolGenerating(true);
+    showToast("Compiling 50 structured AI questions from Hugging Face... please wait");
+
+    try {
+      const categories: Array<"Quantitative" | "Logical" | "Verbal" | "Technical" | "Behavioral"> = [
+        "Quantitative", "Logical", "Verbal", "Technical", "Behavioral"
+      ];
+      
+      const newQuestions: AptitudeQuestion[] = [];
+      
+      // Fetch 10 questions per category (5 Medium, 3 Easy, 2 Hard for balance)
+      for (const cat of categories) {
+        const plans = [
+          { diff: "Medium" as const, count: 5 },
+          { diff: "Easy" as const, count: 3 },
+          { diff: "Hard" as const, count: 2 }
+        ];
+        
+        for (const plan of plans) {
+          try {
+            const batch = await generateCloudAptitudeQuestionsBatch(cat, plan.diff, plan.count);
+            newQuestions.push(...batch);
+          } catch (batchErr) {
+            console.warn(`Hugging Face bulk API failed for ${cat} ${plan.diff}. Reverting to local engine fallback...`);
+            for (let i = 0; i < plan.count; i++) {
+              newQuestions.push(generateDynamicAptitudeQuestion(cat, plan.diff));
+            }
+          }
+        }
+      }
+
+      // Save to user profile
+      const uProf = { ...profile };
+      if (!uProf.solvedPuzzleAnswers) uProf.solvedPuzzleAnswers = {};
+      
+      let existingPool: AptitudeQuestion[] = [];
+      if (uProf.solvedPuzzleAnswers["ai_aptitude_pool"]) {
+        try {
+          existingPool = JSON.parse(uProf.solvedPuzzleAnswers["ai_aptitude_pool"]);
+        } catch (e) {}
+      }
+      
+      const updatedPool = [...existingPool, ...newQuestions];
+      uProf.solvedPuzzleAnswers["ai_aptitude_pool"] = JSON.stringify(updatedPool);
+      saveUserProfile(uProf);
+      setProfile(uProf);
+
+      showToast(`Successfully generated ${newQuestions.length} AI questions! Sync completed.`);
+    } catch (err: any) {
+      console.error("Bulk AI generation failed:", err);
+      showToast(`AI bulk generation error: ${err.message || err}`);
+    } finally {
+      setIsAIPoolGenerating(false);
+    }
+  };
+
+  // Exam simulator trigger - Dyn-compiling Custom Mock Tests via Hugging Face Cloud API
+  const startExamCompany = async (company: "Infosys" | "TCS" | "IBM" | "FAANG") => {
     const qCountMap = { Infosys: 10, TCS: 12, IBM: 8, FAANG: 12 };
     const timeMap = { Infosys: 1800, TCS: 2100, IBM: 1200, FAANG: 2400 }; // seconds
 
     const count = qCountMap[company];
     const seconds = timeMap[company];
+    setExamLoading(true);
+    setExamCompany(company);
+    showToast(`Generating tailor-made ${company} Mock Test via Hugging Face API...`);
 
-    // Pick questions representing a realistic company mix from APTITUDE_POOL that are not in daily set
-    const dailySetIds = new Set(aptitudeSet.map(q => q.id));
-    let pool = APTITUDE_POOL.filter(q => !dailySetIds.has(q.id));
-    
-    // shuffle
-    pool = [...pool].sort(() => 0.5 - Math.random());
-    
-    const questions: AptitudeQuestion[] = [];
-    for (let i = 0; i < count; i++) {
-      questions.push(pool[i % pool.length]);
+    let questions: AptitudeQuestion[] = [];
+    let cloudSuccess = false;
+
+    try {
+      const modelUrl = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-Coder-7B-Instruct/v1/chat/completions";
+      
+      const systemPrompt = `You are a corporate recruiter designing a simulated pre-employment mock test for "${company}".
+Generate exactly ${count} highly realistic multiple-choice aptitude questions tailored to ${company}'s hiring standard.
+Ensure a balanced mix of Quantitative, Logical, and Verbal questions.
+Respond ONLY with a valid JSON array of objects matching this TypeScript interface:
+interface GeneratedQuestion {
+  question: string;
+  options: string[]; // exactly 4 unique choices
+  answer: string; // must match exactly one of options
+  explanation: string; // detailed step-by-step reasoning
+  category: "Quantitative" | "Logical" | "Verbal" | "Technical" | "Behavioral";
+  difficulty: "Easy" | "Medium" | "Hard";
+}`;
+
+      const response = await fetch(modelUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `Generate the ${count} mock test questions now.` }
+          ],
+          temperature: 0.7,
+          max_tokens: 4096
+        })
+      });
+
+      if (!response.ok) throw new Error("HF API unavailable");
+
+      const result = await response.json();
+      const rawText = result.choices?.[0]?.message?.content || "";
+      const jsonStart = rawText.indexOf("[");
+      const jsonEnd = rawText.lastIndexOf("]") + 1;
+      if (jsonStart === -1 || jsonEnd === -1) throw new Error("Invalid json block");
+
+      const parsed = JSON.parse(rawText.slice(jsonStart, jsonEnd));
+      if (Array.isArray(parsed) && parsed.length === count) {
+        questions = parsed.map((item: any, idx: number) => ({
+          id: `dyn-exam-${company.toLowerCase()}-${Date.now()}-${idx}`,
+          category: item.category || "Logical",
+          difficulty: item.difficulty || "Medium",
+          question: item.question,
+          options: item.options,
+          answer: item.answer,
+          explanation: item.explanation,
+          source: "cloud_ai" as const
+        }));
+        cloudSuccess = true;
+      }
+    } catch (err) {
+      console.warn("HF Cloud API failed to compile mock test. Falling back to local engine...", err);
+      showToast("Cloud AI busy. Reverting to local engine fallback...");
     }
 
-    setExamCompany(company);
+    if (!cloudSuccess) {
+      // Safe fallback using procedural generator
+      const categories: Array<"Quantitative" | "Logical" | "Verbal" | "Technical" | "Behavioral"> = [
+        "Quantitative", "Logical", "Verbal", "Technical", "Behavioral"
+      ];
+      const diffs: Array<"Easy" | "Medium" | "Hard"> = ["Easy", "Medium", "Hard"];
+      for (let i = 0; i < count; i++) {
+        const cat = categories[i % categories.length];
+        const diff = diffs[i % diffs.length];
+        questions.push(generateDynamicAptitudeQuestion(cat, diff));
+      }
+    }
+
+    setIsExamCloudGenerated(cloudSuccess);
     setExamQuestions(questions);
     setExamAnswers({});
     setExamTimeRemaining(seconds);
@@ -1454,7 +1608,8 @@ export default function SmartLadderPage() {
     setExamFinished(false);
     setExamPaused(false);
     setExamScore(0);
-    showToast(`AI Exam Mode Activated: ${company} mock test initiated!`);
+    setExamLoading(false);
+    showToast(`Mock test initialized! Provenance: ${cloudSuccess ? "✨ Cloud AI" : "🤖 Local Engine"}`);
   };
 
   // Exam completion scoring and reward processing
@@ -2592,18 +2747,35 @@ export default function SmartLadderPage() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-                {/* Left Columns (Challenges and Exam Mode) */}
                 <div className="lg:col-span-2 flex flex-col gap-6 h-full">
                   {/* Daily AI-Generated Aptitude Sets */}
                   <div className="p-6 rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm space-y-5">
-                    <div className="flex justify-between items-center">
+                    <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
                       <div className="flex items-center gap-2">
                         <Award className="h-4.5 w-4.5 text-violet-400" />
                         <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Daily AI‑generated aptitude set</h3>
                       </div>
-                      <span className="text-[9px] px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold uppercase tracking-wider">
-                        Live Adaptive Engine
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {profile?.solvedPuzzleAnswers?.["ai_aptitude_pool"] && (
+                          <span className="text-[9px] text-zinc-500 font-bold uppercase select-none">
+                            AI Pool: {(() => {
+                              try {
+                                return JSON.parse(profile.solvedPuzzleAnswers["ai_aptitude_pool"]).length;
+                              } catch (e) {
+                                return 0;
+                              }
+                            })()} Qs
+                          </span>
+                        )}
+                        <button
+                          onClick={handleBulkGenerateAIQuestions}
+                          disabled={isAIPoolGenerating}
+                          className="px-3.5 py-1.5 rounded-lg border border-violet-500/20 bg-violet-600/10 text-violet-300 hover:bg-violet-600 hover:text-white transition-all text-[9px] font-extrabold uppercase tracking-wider cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 active:scale-95 shrink-0"
+                        >
+                          <Sparkles className={`h-3 w-3 ${isAIPoolGenerating ? "animate-spin" : ""}`} />
+                          <span>{isAIPoolGenerating ? "Syncing AI..." : "Sync 50 AI Questions"}</span>
+                        </button>
+                      </div>
                     </div>
 
                     <p className="text-xs text-zinc-400 leading-relaxed font-medium">
@@ -2621,7 +2793,7 @@ export default function SmartLadderPage() {
                           <div key={q.id} className="p-5 rounded-xl border border-white/5 bg-black/40 space-y-4">
                             <div className="flex justify-between items-start gap-3">
                               <div className="space-y-1">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-[10px] font-bold text-violet-400 uppercase tracking-widest">
                                     Q{idx + 1}: {q.category}
                                   </span>
@@ -2632,6 +2804,21 @@ export default function SmartLadderPage() {
                                   }`}>
                                     {q.difficulty}
                                   </span>
+                                  {q.source === "cloud_ai" ? (
+                                    <span className="px-1.5 py-0.5 rounded text-[7px] font-extrabold border border-violet-500/20 text-violet-300 bg-violet-500/5 uppercase tracking-wider flex items-center gap-0.5">
+                                      <Sparkles className="h-2 w-2 text-violet-400 animate-pulse" />
+                                      Cloud AI
+                                    </span>
+                                  ) : q.source === "procedural" ? (
+                                    <span className="px-1.5 py-0.5 rounded text-[7px] font-extrabold border border-zinc-500/20 text-zinc-400 bg-zinc-500/5 uppercase tracking-wider flex items-center gap-0.5">
+                                      <Terminal className="h-2 w-2 text-zinc-500" />
+                                      Local Engine
+                                    </span>
+                                  ) : (
+                                    <span className="px-1.5 py-0.5 rounded text-[7px] font-extrabold border border-sky-500/20 text-sky-400 bg-sky-500/5 uppercase tracking-wider">
+                                      Core Pool
+                                    </span>
+                                  )}
                                 </div>
                                 <h4 className="font-bold text-xs text-white leading-relaxed pt-1">{q.question}</h4>
                               </div>
@@ -2736,7 +2923,17 @@ export default function SmartLadderPage() {
                       </span>
                     </div>
 
-                    {!examActive && !examFinished && (
+                    {examLoading ? (
+                      <div className="p-8 rounded-xl border border-white/5 bg-black/40 text-center py-16 flex flex-col items-center justify-center space-y-3.5 animate-fadeIn">
+                        <Sparkles className="h-10 w-10 text-violet-400 animate-spin" />
+                        <div className="space-y-1">
+                          <h5 className="font-extrabold text-sm text-white uppercase tracking-wider">AI Mock Test Generating</h5>
+                          <p className="text-[10px] text-zinc-500 max-w-sm mx-auto leading-relaxed">
+                            Drafting a custom, corporate-standard test via Hugging Face Cloud API. Please wait...
+                          </p>
+                        </div>
+                      </div>
+                    ) : !examActive && !examFinished && (
                       <div className="space-y-4">
                         <p className="text-xs text-zinc-400 leading-relaxed font-medium">
                           Simulate high-stakes, company-specific technical aptitude pre-tests. Experience strict timed countdown intervals, scoring scales, and specialized reward XP packages.
@@ -2830,7 +3027,20 @@ export default function SmartLadderPage() {
                       <div className="space-y-6 border-t border-white/5 pt-4 animate-fadeIn">
                         <div className="flex justify-between items-center">
                           <div className="space-y-0.5">
-                            <h4 className="font-bold text-xs text-white uppercase tracking-wider">Active: {examCompany} Mock Test</h4>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-bold text-xs text-white uppercase tracking-wider">Active: {examCompany} Mock Test</h4>
+                              {isExamCloudGenerated ? (
+                                <span className="px-1.5 py-0.5 rounded text-[7px] font-extrabold border border-violet-500/20 text-violet-300 bg-violet-500/5 uppercase tracking-wider flex items-center gap-0.5 select-none shrink-0">
+                                  <Sparkles className="h-2 w-2 text-violet-400 animate-pulse" />
+                                  Live AI Engine
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded text-[7px] font-extrabold border border-zinc-500/20 text-zinc-400 bg-zinc-500/5 uppercase tracking-wider flex items-center gap-0.5 select-none shrink-0">
+                                  <Terminal className="h-2 w-2 text-zinc-500" />
+                                  Resilient Local Pool
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[10px] text-zinc-500 block leading-normal">
                               Solve all mock questions before the clock expires!
                             </span>
@@ -2897,7 +3107,24 @@ export default function SmartLadderPage() {
                               const selected = examAnswers[q.id];
                               return (
                                 <div key={q.id} className="p-4 rounded-xl border border-white/5 bg-black/20 space-y-3">
-                                  <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Question {idx + 1} ({q.category})</span>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Question {idx + 1} ({q.category})</span>
+                                    {q.source === "cloud_ai" ? (
+                                      <span className="px-1.5 py-0.5 rounded text-[7px] font-extrabold border border-violet-500/20 text-violet-300 bg-violet-500/5 uppercase tracking-wider flex items-center gap-0.5 select-none shrink-0 scale-90 origin-left">
+                                        <Sparkles className="h-2 w-2 text-violet-400 animate-pulse" />
+                                        Cloud AI
+                                      </span>
+                                    ) : q.source === "procedural" ? (
+                                      <span className="px-1.5 py-0.5 rounded text-[7px] font-extrabold border border-zinc-500/20 text-zinc-400 bg-zinc-500/5 uppercase tracking-wider flex items-center gap-0.5 select-none shrink-0 scale-90 origin-left">
+                                        <Terminal className="h-2 w-2 text-zinc-500" />
+                                        Local Engine
+                                      </span>
+                                    ) : (
+                                      <span className="px-1.5 py-0.5 rounded text-[7px] font-extrabold border border-sky-500/20 text-sky-400 bg-sky-500/5 uppercase tracking-wider scale-90 origin-left animate-pulse">
+                                        Core Pool
+                                      </span>
+                                    )}
+                                  </div>
                                   <h5 className="font-bold text-xs text-zinc-200 leading-relaxed">{q.question}</h5>
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
                                     {q.options.map(opt => (

@@ -6,6 +6,7 @@ export interface AptitudeQuestion {
   options: string[];
   answer: string;
   explanation: string;
+  source?: "static" | "procedural" | "cloud_ai";
 }
 
 // Lists of vocab words for Verbal questions
@@ -64,7 +65,7 @@ const BEHAVIORAL_SCENARIOS = [
   }
 ];
 
-export function generateDynamicAptitudeQuestion(
+function generateDynamicAptitudeQuestionInternal(
   category: "Quantitative" | "Logical" | "Verbal" | "Technical" | "Behavioral",
   difficulty: "Easy" | "Medium" | "Hard"
 ): AptitudeQuestion {
@@ -312,4 +313,77 @@ export function generateDynamicAptitudeQuestion(
       };
     }
   }
+}
+
+export function generateDynamicAptitudeQuestion(
+  category: "Quantitative" | "Logical" | "Verbal" | "Technical" | "Behavioral",
+  difficulty: "Easy" | "Medium" | "Hard"
+): AptitudeQuestion {
+  const q = generateDynamicAptitudeQuestionInternal(category, difficulty);
+  q.source = "procedural";
+  return q;
+}
+
+export async function generateCloudAptitudeQuestionsBatch(
+  category: "Quantitative" | "Logical" | "Verbal" | "Technical" | "Behavioral",
+  difficulty: "Easy" | "Medium" | "Hard",
+  count: number = 5
+): Promise<AptitudeQuestion[]> {
+  // Free Serverless Endpoint with robust instruction model
+  const modelUrl = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-Coder-7B-Instruct/v1/chat/completions";
+  
+  const systemPrompt = `You are a professional aptitude test author. Generate exactly ${count} diverse and highly realistic multiple-choice questions for the category "${category}" and difficulty "${difficulty}".
+Each question must be challenging, unique, and strictly structured.
+Respond ONLY with a valid JSON array of objects matching this TypeScript interface:
+interface GeneratedQuestion {
+  question: string;
+  options: string[]; // exactly 4 unique choices
+  answer: string; // must match exactly one of the options
+  explanation: string; // detailed step-by-step reasoning
+}`;
+
+  const response = await fetch(modelUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Generate the ${count} questions now.` }
+      ],
+      temperature: 0.7,
+      max_tokens: 2048
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Hugging Face API returned error: ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  const rawText = result.choices?.[0]?.message?.content || "";
+  
+  // Find JSON block in the response (handles wrapping in markdown blocks cleanly)
+  const jsonStart = rawText.indexOf("[");
+  const jsonEnd = rawText.lastIndexOf("]") + 1;
+  if (jsonStart === -1 || jsonEnd === -1) {
+    throw new Error("Invalid format received from AI model.");
+  }
+  
+  const parsed = JSON.parse(rawText.slice(jsonStart, jsonEnd));
+  if (!Array.isArray(parsed)) {
+    throw new Error("AI did not return a valid array.");
+  }
+
+  return parsed.map((item: any, idx: number) => ({
+    id: `dyn-apt-cloud-${category.toLowerCase().slice(0,3)}-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
+    category,
+    difficulty,
+    question: item.question,
+    options: item.options,
+    answer: item.answer,
+    explanation: item.explanation,
+    source: "cloud_ai" as const
+  }));
 }
