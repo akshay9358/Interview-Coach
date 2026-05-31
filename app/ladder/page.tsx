@@ -40,6 +40,7 @@ import { getLoggedInUser, getUserProfile, saveUserProfile, getLocalTodayStr, Use
 import { PracticeProblem } from "@/lib/apiSync";
 import { SqlProblem } from "@/lib/sqlPracticeData";
 import { Puzzle as PuzzleType } from "@/lib/puzzleData";
+import { generateDynamicAptitudeQuestion } from "@/lib/aptitudeGenerator";
 
 interface LadderProblem {
   id: string;
@@ -1326,7 +1327,7 @@ export default function SmartLadderPage() {
     // Auto-advance to next question after a brief delay for reading the explanation
     setTimeout(() => {
       handleLoadNextAptitudeQuestion(q);
-    }, 3500);
+    }, 10000);
   };
 
   // Dynamically load next unsolved question for a category
@@ -1352,12 +1353,14 @@ export default function SmartLadderPage() {
       );
     }
 
-    // If still empty (user has solved absolutely all questions in this category), fallback to any question that is not the current one
+    let nextQ: AptitudeQuestion;
     if (pool.length === 0) {
-      pool = APTITUDE_POOL.filter(item => item.category === q.category && item.id !== q.id);
+      // If still empty (user has solved absolutely all static questions in this category),
+      // generate a new custom high-quality dynamic question on the fly so we NEVER run out!
+      nextQ = generateDynamicAptitudeQuestion(q.category, currentDiff);
+    } else {
+      nextQ = pool[Math.floor(Math.random() * pool.length)];
     }
-
-    const nextQ = pool[Math.floor(Math.random() * pool.length)] || q;
 
     // Replace in aptitudeSet
     const updatedSet = aptitudeSet.map(item => item.id === q.id ? nextQ : item);
@@ -1385,7 +1388,7 @@ export default function SmartLadderPage() {
     saveUserProfile(uProf);
     setProfile(uProf);
 
-    showToast(`Loaded a new ${q.category} question!`);
+    showToast(`Loaded a new dynamic ${q.category} question!`);
   };
 
   // Exam simulator trigger
