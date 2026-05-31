@@ -444,6 +444,16 @@ export default function SmartLadderPage() {
   const [savedStarStories, setSavedStarStories] = useState<Array<{ prompt: string; situation: string; task: string; action: string; result: string; date: string }>>([]);
   const [examHistory, setExamHistory] = useState<Array<{ company: string; score: string; time: string; status: string; xp: string }>>([]);
 
+  const profileRef = React.useRef(profile);
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
+
+  const aptitudeSetRef = React.useRef(aptitudeSet);
+  useEffect(() => {
+    aptitudeSetRef.current = aptitudeSet;
+  }, [aptitudeSet]);
+
   useEffect(() => {
     const user = getLoggedInUser();
 
@@ -1332,63 +1342,93 @@ export default function SmartLadderPage() {
 
   // Dynamically load next unsolved question for a category
   const handleLoadNextAptitudeQuestion = (q: AptitudeQuestion) => {
-    if (!profile) return;
+    try {
+      const currentProfile = profileRef.current;
+      const currentSet = aptitudeSetRef.current;
+      if (!currentProfile) return;
 
-    const currentDiff = aptitudeDifficulties[q.category] || "Medium";
+      const currentDiff = aptitudeDifficulties[q.category] || "Medium";
 
-    // Filter the pool of this category and difficulty for questions that have NOT been solved/attempted by the user yet
-    let pool = APTITUDE_POOL.filter(
-      item => item.category === q.category &&
-      item.difficulty === currentDiff &&
-      !profile.solvedPuzzles.includes(item.id) &&
-      !(profile.solvedPuzzleAnswers && profile.solvedPuzzleAnswers[item.id])
-    );
-
-    // If pool is empty, relax the difficulty filter
-    if (pool.length === 0) {
-      pool = APTITUDE_POOL.filter(
+      // Filter the pool of this category and difficulty for questions that have NOT been solved/attempted by the user yet
+      let pool = APTITUDE_POOL.filter(
         item => item.category === q.category &&
-        !profile.solvedPuzzles.includes(item.id) &&
-        !(profile.solvedPuzzleAnswers && profile.solvedPuzzleAnswers[item.id])
+        item.difficulty === currentDiff &&
+        !currentProfile.solvedPuzzles.includes(item.id) &&
+        !(currentProfile.solvedPuzzleAnswers && currentProfile.solvedPuzzleAnswers[item.id])
       );
+
+      // If pool is empty, relax the difficulty filter
+      if (pool.length === 0) {
+        pool = APTITUDE_POOL.filter(
+          item => item.category === q.category &&
+          !currentProfile.solvedPuzzles.includes(item.id) &&
+          !(currentProfile.solvedPuzzleAnswers && currentProfile.solvedPuzzleAnswers[item.id])
+        );
+      }
+
+      let nextQ: AptitudeQuestion;
+      if (pool.length === 0) {
+        // If still empty (user has solved absolutely all static questions in this category),
+        // generate a new custom high-quality dynamic question on the fly so we NEVER run out!
+        nextQ = generateDynamicAptitudeQuestion(q.category, currentDiff);
+      } else {
+        nextQ = pool[Math.floor(Math.random() * pool.length)];
+      }
+
+      // Replace in aptitudeSet using non-stale set
+      const updatedSet = currentSet.map(item => item.id === q.id ? nextQ : item);
+      setAptitudeSet(updatedSet);
+
+      // Clear answers and revealed states for this slot
+      setAptitudeAnswers(prev => {
+        const next = { ...prev };
+        delete next[q.id];
+        delete next[nextQ.id];
+        return next;
+      });
+
+      setAptitudeRevealed(prev => {
+        const next = { ...prev };
+        delete next[q.id];
+        delete next[nextQ.id];
+        return next;
+      });
+
+      // Save updated daily set to user profile
+      const uProf = { ...currentProfile };
+      if (!uProf.solvedPuzzleAnswers) uProf.solvedPuzzleAnswers = {};
+      uProf.solvedPuzzleAnswers["aptitude_daily_set"] = JSON.stringify(updatedSet);
+      saveUserProfile(uProf);
+      setProfile(uProf);
+
+      showToast(`Loaded a new dynamic ${q.category} question!`);
+    } catch (err: any) {
+      console.error("Error loading next question:", err);
+      showToast(`Failed to load dynamic question. Reverting to pool fallback...`);
+      
+      // Fallback: pick any random static question from the pool
+      try {
+        const fallbackPool = APTITUDE_POOL.filter(item => item.category === q.category && item.id !== q.id);
+        const fallbackQ = fallbackPool[Math.floor(Math.random() * fallbackPool.length)] || q;
+        const currentSet = aptitudeSetRef.current;
+        const updatedSet = currentSet.map(item => item.id === q.id ? fallbackQ : item);
+        setAptitudeSet(updatedSet);
+        
+        setAptitudeAnswers(prev => {
+          const next = { ...prev };
+          delete next[q.id];
+          delete next[fallbackQ.id];
+          return next;
+        });
+        
+        setAptitudeRevealed(prev => {
+          const next = { ...prev };
+          delete next[q.id];
+          delete next[fallbackQ.id];
+          return next;
+        });
+      } catch (innerErr) {}
     }
-
-    let nextQ: AptitudeQuestion;
-    if (pool.length === 0) {
-      // If still empty (user has solved absolutely all static questions in this category),
-      // generate a new custom high-quality dynamic question on the fly so we NEVER run out!
-      nextQ = generateDynamicAptitudeQuestion(q.category, currentDiff);
-    } else {
-      nextQ = pool[Math.floor(Math.random() * pool.length)];
-    }
-
-    // Replace in aptitudeSet
-    const updatedSet = aptitudeSet.map(item => item.id === q.id ? nextQ : item);
-    setAptitudeSet(updatedSet);
-
-    // Clear answers and revealed states for this slot
-    setAptitudeAnswers(prev => {
-      const next = { ...prev };
-      delete next[q.id];
-      delete next[nextQ.id];
-      return next;
-    });
-
-    setAptitudeRevealed(prev => {
-      const next = { ...prev };
-      delete next[q.id];
-      delete next[nextQ.id];
-      return next;
-    });
-
-    // Save updated daily set to user profile
-    const uProf = { ...profile };
-    if (!uProf.solvedPuzzleAnswers) uProf.solvedPuzzleAnswers = {};
-    uProf.solvedPuzzleAnswers["aptitude_daily_set"] = JSON.stringify(updatedSet);
-    saveUserProfile(uProf);
-    setProfile(uProf);
-
-    showToast(`Loaded a new dynamic ${q.category} question!`);
   };
 
   // Exam simulator trigger
@@ -2670,9 +2710,18 @@ export default function SmartLadderPage() {
                                 <p className="text-xs text-zinc-400 leading-relaxed font-medium">
                                   {q.explanation}
                                 </p>
-                                <div className="border-t border-white/5 pt-3 mt-2 flex items-center gap-2">
-                                  <span className="h-2.5 w-2.5 rounded-full bg-violet-500 animate-pulse shrink-0" />
-                                  <span className="text-[9px] text-zinc-500 font-bold uppercase">Auto-loading next challenge...</span>
+                                <div className="border-t border-white/5 pt-3 mt-2 flex justify-between items-center gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="h-2.5 w-2.5 rounded-full bg-violet-500 animate-pulse shrink-0" />
+                                    <span className="text-[9px] text-zinc-500 font-bold uppercase">Auto-loading next challenge...</span>
+                                  </div>
+                                  <button
+                                    onClick={() => handleLoadNextAptitudeQuestion(q)}
+                                    className="px-3 py-1.5 rounded-xl bg-violet-650 hover:bg-violet-600 text-white text-[10px] font-extrabold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-md shadow-violet-600/20"
+                                  >
+                                    <span>Next Q</span>
+                                    <ArrowRight className="h-3 w-3 text-white" />
+                                  </button>
                                 </div>
                               </div>
                             )}

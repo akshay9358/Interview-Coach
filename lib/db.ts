@@ -425,6 +425,38 @@ async function syncWithSupabase(username: string, localProfile: UserProfile) {
           await pushProfileToSupabase(healedPulled);
         }
 
+        const localAnswersStr = JSON.stringify(localProfile.solvedPuzzleAnswers || {});
+        const cloudAnswersStr = JSON.stringify(healedPulled.solvedPuzzleAnswers || {});
+        const localSqlAnswersStr = JSON.stringify(localProfile.solvedSqlAnswers || {});
+        const cloudSqlAnswersStr = JSON.stringify(healedPulled.solvedSqlAnswers || {});
+        
+        if (localAnswersStr !== cloudAnswersStr || localSqlAnswersStr !== cloudSqlAnswersStr) {
+          console.log("Local puzzle/SQL answers differ from cloud. Merging and pushing to Supabase...");
+          
+          // Merge keys (local takes priority for conflict resolution since it represents active session)
+          const mergedPuzzleAnswers = {
+            ...(healedPulled.solvedPuzzleAnswers || {}),
+            ...(localProfile.solvedPuzzleAnswers || {})
+          };
+          const mergedSqlAnswers = {
+            ...(healedPulled.solvedSqlAnswers || {}),
+            ...(localProfile.solvedSqlAnswers || {})
+          };
+          
+          localProfile.solvedPuzzleAnswers = mergedPuzzleAnswers;
+          localProfile.solvedSqlAnswers = mergedSqlAnswers;
+          
+          // Update local cache & storage first
+          const profilesRaw = localStorage.getItem(STORAGE_KEYS.PROFILES);
+          const profiles = profilesRaw ? JSON.parse(profilesRaw) : {};
+          profiles[username] = localProfile;
+          localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(profiles));
+          cachedProfiles[username] = localProfile;
+          
+          await pushProfileToSupabase(localProfile);
+          window.dispatchEvent(new Event("profile_updated"));
+        }
+
         const usersRaw = localStorage.getItem("ic_users_db") || "{}";
         const users = JSON.parse(usersRaw);
         const localPassword = users[username.toLowerCase()];
