@@ -155,6 +155,7 @@ interface AptitudeQuestion {
   options: string[];
   answer: string;
   explanation: string;
+  source?: "static" | "procedural" | "cloud_ai";
 }
 
 const APTITUDE_POOL: AptitudeQuestion[] = [
@@ -1364,34 +1365,35 @@ export default function SmartLadderPage() {
       }
 
       pool = aiPool.filter(
-        item => item.category === q.category &&
-        item.difficulty === currentDiff &&
+        item => (item.category || "").toLowerCase().trim() === (q.category || "").toLowerCase().trim() &&
+        (item.difficulty || "").toLowerCase().trim() === currentDiff.toLowerCase().trim() &&
         !solvedPuzzles.includes(item.id) &&
         !solvedPuzzleAnswers[item.id]
       );
 
-      // 2. Fallback to hardcoded static pool if AI pool has no matching unsolved questions
-      if (pool.length === 0) {
-        pool = APTITUDE_POOL.filter(
-          item => item.category === q.category &&
-          item.difficulty === currentDiff &&
-          !solvedPuzzles.includes(item.id) &&
-          !solvedPuzzleAnswers[item.id]
-        );
-      }
-
-      // If pool is empty, relax the difficulty filter
+      // 2. Relax difficulty constraints but STAY in AI Pool first
       if (pool.length === 0) {
         pool = aiPool.filter(
-          item => item.category === q.category &&
+          item => (item.category || "").toLowerCase().trim() === (q.category || "").toLowerCase().trim() &&
           !solvedPuzzles.includes(item.id) &&
           !solvedPuzzleAnswers[item.id]
         );
       }
 
+      // 3. Fallback to hardcoded static pool (Core Pool) matching difficulty
       if (pool.length === 0) {
         pool = APTITUDE_POOL.filter(
-          item => item.category === q.category &&
+          item => (item.category || "").toLowerCase().trim() === (q.category || "").toLowerCase().trim() &&
+          (item.difficulty || "").toLowerCase().trim() === currentDiff.toLowerCase().trim() &&
+          !solvedPuzzles.includes(item.id) &&
+          !solvedPuzzleAnswers[item.id]
+        );
+      }
+
+      // 4. Fallback to hardcoded static pool (Core Pool) relaxing difficulty
+      if (pool.length === 0) {
+        pool = APTITUDE_POOL.filter(
+          item => (item.category || "").toLowerCase().trim() === (q.category || "").toLowerCase().trim() &&
           !solvedPuzzles.includes(item.id) &&
           !solvedPuzzleAnswers[item.id]
         );
@@ -1429,10 +1431,30 @@ export default function SmartLadderPage() {
       const uProf = { ...currentProfile };
       if (!uProf.solvedPuzzleAnswers) uProf.solvedPuzzleAnswers = {};
       uProf.solvedPuzzleAnswers["aptitude_daily_set"] = JSON.stringify(updatedSet);
+      
+      // Auto-discard skipped/transitioned question from pool forever by tracking it as solved
+      if (!uProf.solvedPuzzles) uProf.solvedPuzzles = [];
+      if (!uProf.solvedPuzzles.includes(q.id)) {
+        uProf.solvedPuzzles.push(q.id);
+      }
+
       saveUserProfile(uProf);
       setProfile(uProf);
 
-      showToast(`Loaded a new ${nextQ.source === "cloud_ai" ? "Cloud AI" : nextQ.source === "procedural" ? "Local Engine" : "Core Pool"} ${q.category} question!`);
+      // Detailed matching statistics for user visibility
+      const poolWithDiff = aiPool.filter(
+        item => (item.category || "").toLowerCase().trim() === (q.category || "").toLowerCase().trim() &&
+        (item.difficulty || "").toLowerCase().trim() === currentDiff.toLowerCase().trim() &&
+        !solvedPuzzles.includes(item.id) &&
+        !solvedPuzzleAnswers[item.id]
+      );
+      const poolAnyDiff = aiPool.filter(
+        item => (item.category || "").toLowerCase().trim() === (q.category || "").toLowerCase().trim() &&
+        !solvedPuzzles.includes(item.id) &&
+        !solvedPuzzleAnswers[item.id]
+      );
+
+      showToast(`Match: ${nextQ.source === "cloud_ai" ? "Cloud AI" : nextQ.source === "procedural" ? "Local Engine" : "Core Pool"} | AI Pool Total: ${aiPool.length} | Match Cat & Diff: ${poolWithDiff.length} | Match Cat: ${poolAnyDiff.length}`);
     } catch (err: any) {
       console.error("Error loading next question:", err);
       showToast(`Error: ${err.message || "Failed to load next question."}`);
@@ -1470,6 +1492,8 @@ export default function SmartLadderPage() {
     setIsAIPoolGenerating(true);
     showToast("Compiling 50 structured AI questions from Hugging Face... please wait");
 
+    let firstError: any = null;
+
     try {
       const categories: Array<"Quantitative" | "Logical" | "Verbal" | "Technical" | "Behavioral"> = [
         "Quantitative", "Logical", "Verbal", "Technical", "Behavioral"
@@ -1489,8 +1513,11 @@ export default function SmartLadderPage() {
           try {
             const batch = await generateCloudAptitudeQuestionsBatch(cat, plan.diff, plan.count);
             newQuestions.push(...batch);
-          } catch (batchErr) {
-            console.warn(`Hugging Face bulk API failed for ${cat} ${plan.diff}. Reverting to local engine fallback...`);
+          } catch (batchErr: any) {
+            if (!firstError) {
+              firstError = batchErr;
+            }
+            console.warn(`Hugging Face bulk API failed for ${cat} ${plan.diff}. Reverting to local engine fallback...`, batchErr);
             for (let i = 0; i < plan.count; i++) {
               newQuestions.push(generateDynamicAptitudeQuestion(cat, plan.diff));
             }
@@ -1509,12 +1536,69 @@ export default function SmartLadderPage() {
         } catch (e) {}
       }
       
-      const updatedPool = [...existingPool, ...newQuestions];
+      let finalQuestionsBatch = [...newQuestions];
+      let updatedPool: AptitudeQuestion[] = [];
+
+      if (firstError) {
+        // Capping Local Pool at exactly 50 questions maximum
+        const existingLocal = existingPool.filter(item => item.source !== "cloud_ai");
+        const existingCloud = existingPool.filter(item => item.source === "cloud_ai");
+        
+        // Trim existing local questions to at most 50
+        const trimmedLocal = existingLocal.slice(0, 50);
+        
+        // If we have less than 50 local questions, pad it up to exactly 50
+        const needed = 50 - trimmedLocal.length;
+        if (needed > 0) {
+          const categories: Array<"Quantitative" | "Logical" | "Verbal" | "Technical" | "Behavioral"> = [
+            "Quantitative", "Logical", "Verbal", "Technical", "Behavioral"
+          ];
+          for (let i = 0; i < needed; i++) {
+            const cat = categories[i % categories.length];
+            const diffs = ["Easy", "Medium", "Hard"] as const;
+            const diff = diffs[i % diffs.length];
+            trimmedLocal.push(generateDynamicAptitudeQuestion(cat, diff));
+          }
+        }
+        
+        // Override local pool to be capped at exactly 50 questions
+        updatedPool = [...existingCloud, ...trimmedLocal];
+        finalQuestionsBatch = trimmedLocal; // Use the capped pool for transition on screen
+      } else {
+        // Successful HF Cloud Sync: append new cloud questions
+        updatedPool = [...existingPool, ...newQuestions];
+      }
+
       uProf.solvedPuzzleAnswers["ai_aptitude_pool"] = JSON.stringify(updatedPool);
+
+      // Transition current screen's unsolved daily questions to new synced Cloud AI questions instantly
+      const currentSet = aptitudeSetRef.current || aptitudeSet;
+      const transitionalQuestions = [...finalQuestionsBatch];
+      const updatedSet = currentSet.map(q => {
+        const isSolved = !!aptitudeAnswers[q.id];
+        if (isSolved) return q;
+        
+        // Find matching category in fresh batch
+        const match = transitionalQuestions.find(item => item.category === q.category);
+        if (match) {
+          const matchIdx = transitionalQuestions.indexOf(match);
+          if (matchIdx > -1) transitionalQuestions.splice(matchIdx, 1);
+          return match;
+        }
+        return q;
+      });
+
+      setAptitudeSet(updatedSet);
+      uProf.solvedPuzzleAnswers["aptitude_daily_set"] = JSON.stringify(updatedSet);
+
       saveUserProfile(uProf);
       setProfile(uProf);
 
-      showToast(`Successfully generated ${newQuestions.length} AI questions! Sync completed.`);
+      if (firstError) {
+        showToast(`Sync fallback: Hugging Face API failed, fell back to Local Pool. Error: ${firstError.message || firstError}`);
+      } else {
+        showToast(`Successfully generated ${newQuestions.length} Cloud AI questions! Sync completed.`);
+      }
     } catch (err: any) {
       console.error("Bulk AI generation failed:", err);
       showToast(`AI bulk generation error: ${err.message || err}`);
@@ -1538,7 +1622,7 @@ export default function SmartLadderPage() {
     let cloudSuccess = false;
 
     try {
-      const modelUrl = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-Coder-7B-Instruct/v1/chat/completions";
+      const proxyUrl = "/api/huggingface";
       
       const systemPrompt = `You are a corporate recruiter designing a simulated pre-employment mock test for "${company}".
 Generate exactly ${count} highly realistic multiple-choice aptitude questions tailored to ${company}'s hiring standard.
@@ -1553,7 +1637,7 @@ interface GeneratedQuestion {
   difficulty: "Easy" | "Medium" | "Hard";
 }`;
 
-      const response = await fetch(modelUrl, {
+      const response = await fetch(proxyUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -1568,9 +1652,9 @@ interface GeneratedQuestion {
         })
       });
 
-      if (!response.ok) throw new Error("HF API unavailable");
-
       const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Server proxy unavailable");
+
       const rawText = result.choices?.[0]?.message?.content || "";
       const jsonStart = rawText.indexOf("[");
       const jsonEnd = rawText.lastIndexOf("]") + 1;
@@ -2773,15 +2857,34 @@ interface GeneratedQuestion {
                           </button>
                         )}
                         {profile?.solvedPuzzleAnswers?.["ai_aptitude_pool"] && (
-                          <span className="text-[9px] text-zinc-500 font-bold uppercase select-none">
-                            AI Pool: {(() => {
+                          <div className="flex items-center gap-1.5 text-[8px] font-extrabold uppercase select-none tracking-wider">
+                            {(() => {
                               try {
-                                return JSON.parse(profile.solvedPuzzleAnswers["ai_aptitude_pool"]).length;
+                                const items = JSON.parse(profile.solvedPuzzleAnswers["ai_aptitude_pool"]) as AptitudeQuestion[];
+                                const cloudCount = items.filter(i => i.source === "cloud_ai").length;
+                                const localCount = items.filter(i => i.source !== "cloud_ai").length;
+                                
+                                return (
+                                  <div className="flex items-center gap-2 border-r border-white/10 pr-2 mr-0.5 select-none text-[8px]">
+                                    {cloudCount > 0 && (
+                                      <span className="text-violet-400 flex items-center gap-0.5">
+                                        <Sparkles className="h-2 w-2 text-violet-400" />
+                                        Cloud AI: {cloudCount}
+                                      </span>
+                                    )}
+                                    {localCount > 0 && (
+                                      <span className="text-zinc-400 flex items-center gap-0.5">
+                                        <Terminal className="h-2 w-2 text-zinc-500" />
+                                        Local Pool: {localCount}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
                               } catch (e) {
-                                return 0;
+                                return null;
                               }
-                            })()} Qs
-                          </span>
+                            })()}
+                          </div>
                         )}
                         <button
                           onClick={handleBulkGenerateAIQuestions}

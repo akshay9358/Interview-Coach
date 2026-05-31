@@ -329,8 +329,8 @@ export async function generateCloudAptitudeQuestionsBatch(
   difficulty: "Easy" | "Medium" | "Hard",
   count: number = 5
 ): Promise<AptitudeQuestion[]> {
-  // Free Serverless Endpoint with robust instruction model
-  const modelUrl = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-Coder-7B-Instruct/v1/chat/completions";
+  // Call our local server API proxy to completely bypass browser CORS / Failed to fetch
+  const proxyUrl = "/api/huggingface";
   
   const systemPrompt = `You are a professional aptitude test author. Generate exactly ${count} diverse and highly realistic multiple-choice questions for the category "${category}" and difficulty "${difficulty}".
 Each question must be challenging, unique, and strictly structured.
@@ -342,7 +342,7 @@ interface GeneratedQuestion {
   explanation: string; // detailed step-by-step reasoning
 }`;
 
-  const response = await fetch(modelUrl, {
+  const response = await fetch(proxyUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -357,11 +357,11 @@ interface GeneratedQuestion {
     })
   });
 
+  const result = await response.json();
   if (!response.ok) {
-    throw new Error(`Hugging Face API returned error: ${response.statusText}`);
+    throw new Error(result.error || `Server proxy returned error: ${response.statusText}`);
   }
 
-  const result = await response.json();
   const rawText = result.choices?.[0]?.message?.content || "";
   
   // Find JSON block in the response (handles wrapping in markdown blocks cleanly)
