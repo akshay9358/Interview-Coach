@@ -1322,6 +1322,11 @@ export default function SmartLadderPage() {
     } else {
       showToast(`Incorrect! Explanation unlocked. ${q.category} difficulty set to ${nextDiff}.`);
     }
+
+    // Auto-advance to next question after a brief delay for reading the explanation
+    setTimeout(() => {
+      handleLoadNextAptitudeQuestion(q);
+    }, 3500);
   };
 
   // Dynamically load next unsolved question for a category
@@ -2595,13 +2600,13 @@ export default function SmartLadderPage() {
 
                               {/* One-click Action Triggers */}
                               <div className="flex gap-1.5 shrink-0 items-center">
-                                {isAnswered && (
+                                {!isAnswered && (
                                   <button
                                     onClick={() => handleLoadNextAptitudeQuestion(q)}
-                                    title="Load Next Question"
-                                    className="px-3 py-1.5 rounded-xl border border-violet-500/20 bg-violet-650 hover:bg-violet-600 text-white font-extrabold text-[10px] uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1 active:scale-95 shrink-0"
+                                    title="Skip / Load Next Question"
+                                    className="px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white font-extrabold text-[10px] uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1 active:scale-95 shrink-0"
                                   >
-                                    <span>Next Q</span>
+                                    <span>Skip</span>
                                     <ArrowRight className="h-3 w-3" />
                                   </button>
                                 )}
@@ -2662,15 +2667,9 @@ export default function SmartLadderPage() {
                                 <p className="text-xs text-zinc-400 leading-relaxed font-medium">
                                   {q.explanation}
                                 </p>
-                                <div className="border-t border-white/5 pt-3 mt-2 flex justify-between items-center">
-                                  <span className="text-[9px] text-zinc-500 font-bold uppercase">Challenge Resolved</span>
-                                  <button
-                                    onClick={() => handleLoadNextAptitudeQuestion(q)}
-                                    className="px-3.5 py-1.5 rounded-lg bg-violet-650 hover:bg-violet-650/80 text-white text-[10px] font-extrabold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-md shadow-violet-600/20"
-                                  >
-                                    <span>Next {q.category} Challenge</span>
-                                    <ArrowRight className="h-3 w-3 text-white" />
-                                  </button>
+                                <div className="border-t border-white/5 pt-3 mt-2 flex items-center gap-2">
+                                  <span className="h-2.5 w-2.5 rounded-full bg-violet-500 animate-pulse shrink-0" />
+                                  <span className="text-[9px] text-zinc-500 font-bold uppercase">Auto-loading next challenge...</span>
                                 </div>
                               </div>
                             )}
