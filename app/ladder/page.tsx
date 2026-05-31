@@ -565,17 +565,38 @@ export default function SmartLadderPage() {
       
       setSavedLadders(saved);
 
-      // Hydrate saved STAR stories from localStorage
+      // Hydrate saved STAR stories — profile (cloud-synced) first, localStorage fallback
       if (typeof window !== "undefined") {
-        const savedStoriesRaw = localStorage.getItem("ic_saved_star_stories") || "[]";
-        try {
-          setSavedStarStories(JSON.parse(savedStoriesRaw));
-        } catch (e) {}
+        let starStories: any[] = [];
+        if (uProf.solvedPuzzleAnswers?.["saved_star_stories"]) {
+          try { starStories = JSON.parse(uProf.solvedPuzzleAnswers["saved_star_stories"]); } catch (e) {}
+        }
+        if (starStories.length === 0) {
+          try { starStories = JSON.parse(localStorage.getItem("ic_saved_star_stories") || "[]"); } catch (e) {}
+        }
+        setSavedStarStories(starStories);
+        // Persist to profile if recovered from localStorage-only
+        if (starStories.length > 0 && !uProf.solvedPuzzleAnswers?.["saved_star_stories"]) {
+          if (!uProf.solvedPuzzleAnswers) uProf.solvedPuzzleAnswers = {};
+          uProf.solvedPuzzleAnswers["saved_star_stories"] = JSON.stringify(starStories);
+          saveUserProfile(uProf);
+        }
 
-        const savedHistRaw = localStorage.getItem("ic_exam_history") || "[]";
-        try {
-          setExamHistory(JSON.parse(savedHistRaw));
-        } catch (e) {}
+        // Hydrate exam history — profile (cloud-synced) first, localStorage fallback
+        let examHist: any[] = [];
+        if (uProf.solvedPuzzleAnswers?.["exam_history"]) {
+          try { examHist = JSON.parse(uProf.solvedPuzzleAnswers["exam_history"]); } catch (e) {}
+        }
+        if (examHist.length === 0) {
+          try { examHist = JSON.parse(localStorage.getItem("ic_exam_history") || "[]"); } catch (e) {}
+        }
+        setExamHistory(examHist);
+        // Persist to profile if recovered from localStorage-only
+        if (examHist.length > 0 && !uProf.solvedPuzzleAnswers?.["exam_history"]) {
+          if (!uProf.solvedPuzzleAnswers) uProf.solvedPuzzleAnswers = {};
+          uProf.solvedPuzzleAnswers["exam_history"] = JSON.stringify(examHist);
+          saveUserProfile(uProf);
+        }
       }
 
       // One-time Reset of Aptitude Progress as requested by the user
@@ -742,6 +763,75 @@ export default function SmartLadderPage() {
         saveUserProfile(uProf);
       }
     }
+  }, []);
+
+  // Re-hydrate all aptitude state when Supabase cloud sync completes on another device
+  useEffect(() => {
+    const handleProfileUpdated = () => {
+      const user = getLoggedInUser();
+      if (!user) return;
+      const uProf = getUserProfile(user);
+      setProfile(uProf);
+
+      // Re-hydrate aptitude stats
+      if (uProf.solvedPuzzleAnswers?.["aptitude_stats"]) {
+        try {
+          const parsed = JSON.parse(uProf.solvedPuzzleAnswers["aptitude_stats"]);
+          if (!parsed.dailyHistory) {
+            parsed.dailyHistory = { Sun: { solved: 0, correct: 0 }, Mon: { solved: 0, correct: 0 }, Tue: { solved: 0, correct: 0 }, Wed: { solved: 0, correct: 0 }, Thu: { solved: 0, correct: 0 }, Fri: { solved: 0, correct: 0 }, Sat: { solved: 0, correct: 0 } };
+          }
+          setAptStats(parsed);
+        } catch (e) {}
+      }
+
+      // Re-hydrate aptitude difficulties
+      if (uProf.solvedPuzzleAnswers?.["aptitude_difficulties"]) {
+        try { setAptitudeDifficulties(JSON.parse(uProf.solvedPuzzleAnswers["aptitude_difficulties"])); } catch (e) {}
+      }
+
+      // Re-hydrate aptitude daily set + answers
+      if (uProf.solvedPuzzleAnswers?.["aptitude_daily_set"]) {
+        try {
+          const parsedSet = JSON.parse(uProf.solvedPuzzleAnswers["aptitude_daily_set"]);
+          if (Array.isArray(parsedSet) && parsedSet.length === 5) {
+            setAptitudeSet(parsedSet);
+            const answers: Record<string, string> = {};
+            const revealed: Record<string, boolean> = {};
+            parsedSet.forEach((q: any) => {
+              if (uProf.solvedPuzzleAnswers![q.id]) {
+                answers[q.id] = uProf.solvedPuzzleAnswers![q.id];
+                revealed[q.id] = true;
+              }
+            });
+            setAptitudeAnswers(answers);
+            setAptitudeRevealed(revealed);
+          }
+        } catch (e) {}
+      }
+
+      // Re-hydrate exam history from profile
+      if (uProf.solvedPuzzleAnswers?.["exam_history"]) {
+        try { setExamHistory(JSON.parse(uProf.solvedPuzzleAnswers["exam_history"])); } catch (e) {}
+      }
+
+      // Re-hydrate saved STAR stories from profile
+      if (uProf.solvedPuzzleAnswers?.["saved_star_stories"]) {
+        try { setSavedStarStories(JSON.parse(uProf.solvedPuzzleAnswers["saved_star_stories"])); } catch (e) {}
+      }
+
+      // Re-hydrate active ladder
+      if (uProf.solvedPuzzleAnswers?.["ai_ladder_data"]) {
+        try { setActiveLadder(JSON.parse(uProf.solvedPuzzleAnswers["ai_ladder_data"])); } catch (e) {}
+      }
+
+      // Re-hydrate saved ladders
+      if (uProf.solvedPuzzleAnswers?.["saved_ladders_data"]) {
+        try { setSavedLadders(JSON.parse(uProf.solvedPuzzleAnswers["saved_ladders_data"])); } catch (e) {}
+      }
+    };
+
+    window.addEventListener("profile_updated", handleProfileUpdated);
+    return () => window.removeEventListener("profile_updated", handleProfileUpdated);
   }, []);
 
   const triggerGenerateLadder = () => {
@@ -1381,6 +1471,10 @@ export default function SmartLadderPage() {
       localStorage.setItem("ic_exam_history", JSON.stringify(updatedHist));
     }
 
+    // Sync exam history to profile for Supabase cloud sync across devices
+    if (!uProf.solvedPuzzleAnswers) uProf.solvedPuzzleAnswers = {};
+    uProf.solvedPuzzleAnswers["exam_history"] = JSON.stringify(updatedHist);
+
     if (!uProf.solvedPuzzleAnswers) uProf.solvedPuzzleAnswers = {};
     uProf.solvedPuzzleAnswers["aptitude_stats"] = JSON.stringify(currentStats);
     saveUserProfile(uProf);
@@ -1501,7 +1595,7 @@ export default function SmartLadderPage() {
       <Sidebar />
 
       {/* Main view container */}
-      <main className="flex-1 lg:pl-72 pl-0 min-h-screen flex flex-col bg-zinc-950 pb-12">
+      <main className="flex-1 lg:pl-72 pl-0 min-h-screen flex flex-col bg-zinc-950 pb-12 max-w-full overflow-x-hidden">
         {/* Top Header Bar */}
         <header className="h-16 border-b border-white/5 bg-zinc-950/60 backdrop-blur-md flex items-center justify-between lg:px-8 px-4 pl-16 sticky top-0 z-10">
           <div className="flex items-center gap-2">
@@ -1518,10 +1612,10 @@ export default function SmartLadderPage() {
 
         {/* Tab selection */}
         <div className="lg:px-8 px-4 pt-6">
-          <div className="flex gap-1.5 border-b border-white/5 pb-px w-full max-w-xl">
+          <div className="flex gap-1.5 border-b border-white/5 pb-px w-full max-w-xl overflow-x-auto whitespace-nowrap [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] flex-nowrap">
             <button
               onClick={() => handleTabChange("daily")}
-              className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+              className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                 activeTab === "daily"
                   ? "border-violet-500 text-white"
                   : "border-transparent text-zinc-500 hover:text-zinc-300"
@@ -1533,7 +1627,7 @@ export default function SmartLadderPage() {
 
              <button
               onClick={() => handleTabChange("ladder")}
-              className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+              className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                 activeTab === "ladder"
                   ? "border-violet-500 text-white"
                   : "border-transparent text-zinc-500 hover:text-zinc-300"
@@ -1545,7 +1639,7 @@ export default function SmartLadderPage() {
 
             <button
               onClick={() => handleTabChange("aptitude")}
-              className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+              className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                 activeTab === "aptitude"
                   ? "border-violet-500 text-white"
                   : "border-transparent text-zinc-500 hover:text-zinc-300"
@@ -1557,7 +1651,7 @@ export default function SmartLadderPage() {
 
             <button
               onClick={() => handleTabChange("behavioral")}
-              className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+              className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                 activeTab === "behavioral"
                   ? "border-violet-500 text-white"
                   : "border-transparent text-zinc-500 hover:text-zinc-300"
@@ -2198,6 +2292,14 @@ export default function SmartLadderPage() {
                                       if (typeof window !== "undefined") {
                                         localStorage.setItem("ic_saved_star_stories", JSON.stringify(updated));
                                       }
+                                      // Sync deletion to profile for Supabase cloud sync
+                                      if (profile) {
+                                        const uProf = { ...profile };
+                                        if (!uProf.solvedPuzzleAnswers) uProf.solvedPuzzleAnswers = {};
+                                        uProf.solvedPuzzleAnswers["saved_star_stories"] = JSON.stringify(updated);
+                                        saveUserProfile(uProf);
+                                        setProfile(uProf);
+                                      }
                                       showToast("STAR story deleted.");
                                     }}
                                     className="p-1 rounded-lg hover:bg-red-500/10 text-zinc-500 hover:text-red-400 transition-all cursor-pointer"
@@ -2330,8 +2432,16 @@ export default function SmartLadderPage() {
                           if (typeof window !== "undefined") {
                             localStorage.setItem("ic_saved_star_stories", JSON.stringify(updated));
                           }
+                          // Sync to profile for Supabase cloud sync across devices
+                          if (profile) {
+                            const uProf = { ...profile };
+                            if (!uProf.solvedPuzzleAnswers) uProf.solvedPuzzleAnswers = {};
+                            uProf.solvedPuzzleAnswers["saved_star_stories"] = JSON.stringify(updated);
+                            saveUserProfile(uProf);
+                            setProfile(uProf);
+                          }
                           setStarSaved(true);
-                          showToast("STAR framework cheat sheet saved to local profile!");
+                          showToast("STAR framework cheat sheet saved & synced to cloud!");
                         }}
                         className="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-bold text-white transition-all cursor-pointer select-none active:scale-[0.99]"
                       >

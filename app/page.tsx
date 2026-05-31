@@ -5,6 +5,11 @@ import Link from "next/link";
 import { ArrowRight, Code2, Database, Puzzle, BarChart3, Terminal, Award, Sparkles } from "lucide-react";
 
 export default function LandingPage() {
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const handleTryDemo = (e: React.MouseEvent) => {
     e.preventDefault();
     if (typeof window !== "undefined") {
@@ -31,6 +36,21 @@ export default function LandingPage() {
       window.location.href = "/dashboard";
     }
   };
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center font-sans">
+        <div className="flex items-center gap-3 animate-pulse">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-tr from-violet-600 to-fuchsia-600 font-bold text-white shadow-lg shadow-violet-500/25">
+            IC
+          </div>
+          <span className="font-semibold text-lg bg-gradient-to-r from-white via-zinc-100 to-zinc-400 bg-clip-text text-transparent">
+            Interview Coach
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   const features = [
     {

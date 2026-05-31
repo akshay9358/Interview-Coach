@@ -695,18 +695,18 @@ export default function SqlPractice() {
       <Sidebar />
 
       {/* Main console content */}
-      <main className="flex-1 lg:pl-72 pl-0 min-h-screen flex flex-col bg-zinc-950 pb-12">
+      <main className="flex-1 lg:pl-72 pl-0 min-h-screen flex flex-col bg-zinc-950 pb-12 max-w-full overflow-x-hidden">
         {/* Top Header Bar */}
-        <header className="h-16 border-b border-white/5 bg-zinc-950/60 backdrop-blur-md flex items-center justify-between lg:px-8 px-4 pl-16 sticky top-0 z-10">
-          <div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-white via-zinc-100 to-zinc-400 bg-clip-text text-transparent">
-              SQL Practices Console
+        <header className="h-16 border-b border-white/5 bg-zinc-950/60 backdrop-blur-md flex items-center justify-between lg:px-8 px-4 pl-16 sticky top-0 z-10 w-full overflow-hidden">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-base sm:text-xl font-bold bg-gradient-to-r from-white via-zinc-100 to-zinc-400 bg-clip-text text-transparent truncate">
+              SQL Practice Console
             </h1>
-            <p className="text-xs text-zinc-500 mt-0.5">Write actual queries against a live SQLite WebAssembly container.</p>
+            <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5 truncate">Write queries against a live SQLite WebAssembly container.</p>
           </div>
           
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-zinc-400 bg-white/[0.04] px-3 py-1.5 rounded-full border border-white/5 font-semibold flex items-center gap-1.5">
+          <div className="flex items-center gap-3 shrink-0 ml-2">
+            <span className="text-[10px] sm:text-xs text-zinc-400 bg-white/[0.04] px-2.5 py-1.5 rounded-full border border-white/5 font-semibold hidden sm:flex items-center gap-1.5">
               <Database className="h-3.5 w-3.5 text-violet-400" />
               SQLite WASM Active
             </span>

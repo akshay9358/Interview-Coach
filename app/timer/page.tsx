@@ -863,7 +863,7 @@ export default function TimedPracticePage() {
       <Sidebar />
 
       {/* Main content view */}
-      <main className="flex-1 lg:pl-72 pl-0 min-h-screen flex flex-col bg-zinc-950 pb-12">
+      <main className="flex-1 lg:pl-72 pl-0 min-h-screen flex flex-col bg-zinc-950 pb-12 max-w-full overflow-x-hidden">
         {/* Top Header Bar */}
         <header className="h-16 border-b border-white/5 bg-zinc-950/60 backdrop-blur-md flex items-center justify-between lg:px-8 px-4 pl-16 sticky top-0 z-10">
           <div>
