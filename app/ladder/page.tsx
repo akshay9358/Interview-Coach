@@ -1333,11 +1333,6 @@ export default function SmartLadderPage() {
     } else {
       showToast(`Incorrect! Explanation unlocked. ${q.category} difficulty set to ${nextDiff}.`);
     }
-
-    // Auto-advance to next question after a brief delay for reading the explanation
-    setTimeout(() => {
-      handleLoadNextAptitudeQuestion(q);
-    }, 10000);
   };
 
   // Dynamically load next unsolved question for a category
@@ -2711,15 +2706,12 @@ export default function SmartLadderPage() {
                                   {q.explanation}
                                 </p>
                                 <div className="border-t border-white/5 pt-3 mt-2 flex justify-between items-center gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="h-2.5 w-2.5 rounded-full bg-violet-500 animate-pulse shrink-0" />
-                                    <span className="text-[9px] text-zinc-500 font-bold uppercase">Auto-loading next challenge...</span>
-                                  </div>
+                                  <span className="text-[9px] text-zinc-500 font-bold uppercase">Challenge Resolved</span>
                                   <button
                                     onClick={() => handleLoadNextAptitudeQuestion(q)}
-                                    className="px-3 py-1.5 rounded-xl bg-violet-650 hover:bg-violet-600 text-white text-[10px] font-extrabold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-md shadow-violet-600/20"
+                                    className="px-3.5 py-1.5 rounded-lg bg-violet-650 hover:bg-violet-600 text-white text-[10px] font-extrabold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-md shadow-violet-600/20"
                                   >
-                                    <span>Next Q</span>
+                                    <span>Next Challenge</span>
                                     <ArrowRight className="h-3 w-3 text-white" />
                                   </button>
                                 </div>
