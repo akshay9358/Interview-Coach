@@ -185,6 +185,15 @@ const APTITUDE_POOL: AptitudeQuestion[] = [
     answer: "36 days",
     explanation: "Total efficiency = 5 + 3 + 8 = 16. Total work = 16 * 30 = 480. 60% of total work = 480 * 0.60 = 288. Combined efficiency of A and B = 5 + 3 = 8. Days required by A and B = 288 / 8 = 36 days."
   },
+  {
+    id: "apt-q-4",
+    category: "Quantitative",
+    difficulty: "Medium",
+    question: "A can do a piece of work in 20 days, B in 30 days, and C in 60 days. In how many days can A do the work if he is assisted by B and C on every third day?",
+    options: ["12 days", "15 days", "16 days", "18 days"],
+    answer: "15 days",
+    explanation: "A's 1 day work = 1/20. B's 1 day work = 1/30. C's 1 day work = 1/60. Work done in first 2 days by A alone = 2 * (1/20) = 1/10. Work done on 3rd day by A, B, and C together = 1/20 + 1/30 + 1/60 = 1/10. Total work done in 3 days = 1/10 + 1/10 = 1/5. Thus, the whole work is completed in 3 * 5 = 15 days."
+  },
   
   // Logical Reasoning
   {
@@ -368,6 +377,7 @@ export default function SmartLadderPage() {
   const [aptitudeSet, setAptitudeSet] = useState<AptitudeQuestion[]>([]);
   const [aptitudeAnswers, setAptitudeAnswers] = useState<Record<string, string>>({}); // questionId -> selectedOption
   const [aptitudeRevealed, setAptitudeRevealed] = useState<Record<string, boolean>>({}); // questionId -> boolean
+  const [expandedSolvedId, setExpandedSolvedId] = useState<string | null>(null);
   const [aptitudeDifficulties, setAptitudeDifficulties] = useState<Record<string, "Easy" | "Medium" | "Hard">>({
     "Quantitative": "Medium",
     "Logical": "Medium",
@@ -569,8 +579,8 @@ export default function SmartLadderPage() {
       }
 
       // One-time Reset of Aptitude Progress as requested by the user
-      if (uProf && (!uProf.solvedPuzzleAnswers || !uProf.solvedPuzzleAnswers["aptitude_progress_reset_v1"])) {
-        console.log("Resetting Smart Aptitude (AI) progress as requested by the user...");
+      if (uProf && (!uProf.solvedPuzzleAnswers || !uProf.solvedPuzzleAnswers["aptitude_progress_reset_v3"])) {
+        console.log("Resetting Smart Aptitude (AI) progress to clean slate...");
         
         let correctAnswersGained = 0;
         if (uProf.solvedPuzzleAnswers && uProf.solvedPuzzleAnswers["aptitude_stats"]) {
@@ -592,15 +602,38 @@ export default function SmartLadderPage() {
         const answers = uProf.solvedPuzzleAnswers;
         if (answers) {
           Object.keys(answers).forEach(key => {
-            if (key.startsWith("apt-") || key === "aptitude_stats" || key === "aptitude_daily_set" || key === "aptitude_difficulties") {
+            if (key.startsWith("apt-") || key === "aptitude_stats" || key === "aptitude_daily_set" || key === "aptitude_difficulties" || key === "aptitude_recovery_v1" || key === "aptitude_recovery_v2") {
               delete answers[key];
             }
           });
-          answers["aptitude_progress_reset_v1"] = "true";
+          answers["aptitude_progress_reset_v3"] = "true";
         }
         
         // Save the profile to automatically sync to Supabase Cloud
         saveUserProfile(uProf);
+        
+        // Reset local state to empty
+        setAptitudeAnswers({});
+        setAptitudeRevealed({});
+        setAptStats({
+          solvedCount: 0,
+          correctCount: 0,
+          quantMastery: 0,
+          logicMastery: 0,
+          verbalMastery: 0,
+          technicalMastery: 0,
+          behavioralMastery: 0,
+          averageSpeedSec: 0,
+          dailyHistory: {
+            Sun: { solved: 0, correct: 0 },
+            Mon: { solved: 0, correct: 0 },
+            Tue: { solved: 0, correct: 0 },
+            Wed: { solved: 0, correct: 0 },
+            Thu: { solved: 0, correct: 0 },
+            Fri: { solved: 0, correct: 0 },
+            Sat: { solved: 0, correct: 0 }
+          }
+        });
       }
 
       // Load aptitude stats and daily set
@@ -680,8 +713,13 @@ export default function SmartLadderPage() {
           
         (["Quantitative", "Logical", "Verbal", "Technical", "Behavioral"] as const).forEach(cat => {
           const targetDiff = diffs[cat] || "Medium";
-          const pool = APTITUDE_POOL.filter(q => q.category === cat && q.difficulty === targetDiff);
-          const selected = pool[Math.floor(Math.random() * pool.length)] || APTITUDE_POOL.find(q => q.category === cat) || APTITUDE_POOL[0];
+          let selected: AptitudeQuestion;
+          if (cat === "Quantitative") {
+            selected = APTITUDE_POOL.find(q => q.id === "apt-q-4") || APTITUDE_POOL[0];
+          } else {
+            const pool = APTITUDE_POOL.filter(q => q.category === cat && q.difficulty === targetDiff);
+            selected = pool[Math.floor(Math.random() * pool.length)] || APTITUDE_POOL.find(q => q.category === cat) || APTITUDE_POOL[0];
+          }
           freshSet.push(selected);
         });
         
@@ -2783,14 +2821,18 @@ export default function SmartLadderPage() {
                     </div>
 
                     {(() => {
-                      // Build solved history from profile.solvedPuzzleAnswers cross-referenced with APTITUDE_POOL
+                      // Build solved history from profile.solvedPuzzleAnswers or profile.solvedPuzzles cross-referenced with APTITUDE_POOL
                       const solvedItems = APTITUDE_POOL.filter(
-                        q => profile?.solvedPuzzleAnswers?.[q.id]
-                      ).map(q => ({
-                        ...q,
-                        userAnswer: profile!.solvedPuzzleAnswers![q.id],
-                        isCorrect: profile!.solvedPuzzleAnswers![q.id] === q.answer,
-                      }));
+                        q => (profile?.solvedPuzzleAnswers?.[q.id] !== undefined) || (profile?.solvedPuzzles?.includes(q.id))
+                      ).map(q => {
+                        const ans = profile?.solvedPuzzleAnswers?.[q.id] || q.answer;
+                        const isCorrect = ans === q.answer || profile?.solvedPuzzles?.includes(q.id);
+                        return {
+                          ...q,
+                          userAnswer: ans,
+                          isCorrect,
+                        };
+                      }).reverse(); // Descending (cross-down) order showing latest solves on top!
 
                       if (solvedItems.length === 0) {
                         return (
@@ -2806,29 +2848,92 @@ export default function SmartLadderPage() {
                       return (
                         <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1 flex-1">
                           {solvedItems.map((item, idx) => (
-                            <div key={item.id} className="flex items-start gap-3 p-3 rounded-xl border border-white/[0.03] bg-black/20 hover:bg-black/30 transition-all">
-                              <div className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 text-[10px] font-extrabold ${
-                                item.isCorrect
-                                  ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
-                                  : "bg-rose-500/10 border border-rose-500/20 text-rose-400"
-                              }`}>
-                                {item.isCorrect ? "✓" : "✗"}
-                              </div>
-                              <div className="flex-1 min-w-0 space-y-0.5">
-                                <p className="text-[11px] font-semibold text-zinc-300 leading-snug line-clamp-2">{item.question}</p>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${
-                                    item.category === "Quantitative" ? "bg-violet-500/10 border border-violet-500/20 text-violet-400"
-                                    : item.category === "Logical" ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
-                                    : "bg-sky-500/10 border border-sky-500/20 text-sky-400"
-                                  }`}>{item.category}</span>
-                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${
-                                    item.difficulty === "Easy" ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
-                                    : item.difficulty === "Medium" ? "bg-amber-500/10 border border-amber-500/20 text-amber-400"
-                                    : "bg-rose-500/10 border border-rose-500/20 text-rose-400"
-                                  }`}>{item.difficulty}</span>
+                            <div
+                              key={item.id}
+                              onClick={() => setExpandedSolvedId(expandedSolvedId === item.id ? null : item.id)}
+                              className="flex flex-col p-3 rounded-xl border border-white/[0.03] bg-black/20 hover:bg-black/30 transition-all cursor-pointer select-none"
+                            >
+                              <div className="flex items-start gap-3 w-full">
+                                <div className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 text-[10px] font-extrabold ${
+                                  item.isCorrect
+                                    ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                                    : "bg-rose-500/10 border border-rose-500/20 text-rose-450"
+                                }`}>
+                                  {item.isCorrect ? "✓" : "✗"}
                                 </div>
+                                <div className="flex-1 min-w-0 space-y-0.5">
+                                  <p className={`text-[11px] font-semibold text-zinc-300 leading-snug ${expandedSolvedId === item.id ? "" : "line-clamp-2"}`}>
+                                    {item.question}
+                                  </p>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${
+                                      item.category === "Quantitative" ? "bg-violet-500/10 border border-violet-500/20 text-violet-400"
+                                      : item.category === "Logical" ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                                      : item.category === "Verbal" ? "bg-sky-500/10 border border-sky-500/20 text-sky-400"
+                                      : item.category === "Technical" ? "bg-amber-500/10 border border-amber-500/20 text-amber-400"
+                                      : "bg-rose-500/10 border border-rose-500/20 text-rose-450"
+                                    }`}>{item.category}</span>
+                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${
+                                      item.difficulty === "Easy" ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                                      : item.difficulty === "Medium" ? "bg-amber-500/10 border border-amber-500/20 text-amber-400"
+                                      : "bg-rose-500/10 border border-rose-500/20 text-rose-450"
+                                    }`}>{item.difficulty}</span>
+                                  </div>
+                                </div>
+                                <ChevronDown className={`h-4 w-4 text-zinc-400 shrink-0 self-center transition-transform duration-200 ${expandedSolvedId === item.id ? "rotate-180" : ""}`} />
                               </div>
+
+                              {expandedSolvedId === item.id && (
+                                <div
+                                  className="mt-3 pt-3 border-t border-white/5 space-y-3 animate-fadeIn text-left"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {/* Options */}
+                                  <div className="space-y-1.5">
+                                    <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Options</span>
+                                    <div className="grid grid-cols-1 gap-1.5">
+                                      {item.options.map(opt => {
+                                        const isSelected = item.userAnswer === opt;
+                                        const isAnswer = item.answer === opt;
+                                        return (
+                                          <div
+                                            key={opt}
+                                            className={`p-2 rounded-lg border text-left text-[10px] font-medium leading-relaxed transition-all ${
+                                              isSelected && isAnswer
+                                                ? "border-emerald-500 bg-emerald-500/10 text-emerald-400 font-semibold"
+                                                : isSelected && !isAnswer
+                                                ? "border-rose-500 bg-rose-500/10 text-rose-450 font-semibold"
+                                                : !isSelected && isAnswer
+                                                ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-400"
+                                                : "border-white/5 bg-white/[0.01] text-zinc-450"
+                                            }`}
+                                          >
+                                            <div className="flex justify-between items-center">
+                                              <span>{opt}</span>
+                                              {isSelected && (
+                                                <span className="text-[8px] font-bold uppercase tracking-wider px-1 py-0.2 rounded bg-black/40 border border-white/5 shrink-0">
+                                                  Your Choice
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+
+                                  {/* Explanation */}
+                                  <div className="p-2.5 rounded-lg border border-violet-500/10 bg-violet-500/[0.02] space-y-1">
+                                    <div className="flex items-center gap-1.5 text-[9px] font-bold text-violet-400 uppercase tracking-wider">
+                                      <Sparkles className="h-3 w-3" />
+                                      <span>Explanation</span>
+                                    </div>
+                                    <p className="text-[10px] text-zinc-350 leading-relaxed font-medium">
+                                      {item.explanation}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -2981,22 +3086,43 @@ export default function SmartLadderPage() {
                           1/Total_Time = 1/A + 1/B + 1/C
                         </p>
                         <p className="text-[10px] text-zinc-400 leading-normal font-medium pt-1">
-                          Use this when A, B, and C work together. When assisted on alternate days, accumulate work done in cycles (e.g. 3-day blocks) to simplify calculations.
+                          Use this when A, B, and C work together. When assisted on alternate days, accumulate work done in cycles (e.g. 3-day blocks) to simplify calculation.
                         </p>
                       </div>
 
                       {/* AI Coach Insights */}
                       <div className="p-4 rounded-xl border border-emerald-500/10 bg-emerald-500/[0.01] space-y-3 flex-1 flex flex-col justify-between">
                         {aptStats.solvedCount === 0 ? (
-                          <div className="space-y-2.5">
-                            <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest block">AI Coach Focus Areas</span>
-                            <h4 className="font-bold text-xs text-white">Awaiting Diagnostic Solve</h4>
-                            <p className="text-[10px] text-zinc-400 leading-relaxed font-medium">
-                              Your AI Coach is ready to evaluate your skills! Complete your first adaptive daily challenge questions or start a mock exam simulation to analyze speed metrics, category mastery thresholds, and precision statistics.
-                            </p>
-                            <p className="text-[10px] text-zinc-500 leading-normal font-medium border-t border-emerald-500/10 pt-2.5 mt-2">
-                              💡 <em>Diagnostic: Category speed tracking initializes automatically after receiving your first adaptive answer submissions.</em>
-                            </p>
+                          <div className="space-y-4">
+                            <div className="space-y-2.5">
+                              <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest block">AI Coach Focus Areas</span>
+                              <h4 className="font-bold text-xs text-white">Awaiting Diagnostic Solve</h4>
+                              <p className="text-[10px] text-zinc-400 leading-relaxed font-medium">
+                                Your AI Coach is ready to evaluate your skills! Complete your first adaptive daily challenge questions or start a mock exam simulation to analyze speed metrics, category mastery thresholds, and precision statistics.
+                              </p>
+                              <p className="text-[10px] text-zinc-550 leading-normal font-medium border-t border-emerald-500/10 pt-2.5 mt-2">
+                                💡 <em>Diagnostic: Category speed tracking initializes automatically after receiving your first adaptive answer submissions.</em>
+                              </p>
+                            </div>
+
+                            {/* Diagnostic Onboarding Tasks Checklist */}
+                            <div className="p-3.5 rounded-xl border border-white/5 bg-black/40 space-y-2.5">
+                              <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest block">AI Onboarding Checklist</span>
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2 text-[10px] text-zinc-400">
+                                  <div className="h-4 w-4 rounded border border-white/10 bg-white/[0.02] flex items-center justify-center text-[9px] text-zinc-500 font-bold">1</div>
+                                  <span>Complete any <strong>Daily Aptitude Challenge</strong> question above</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px] text-zinc-400">
+                                  <div className="h-4 w-4 rounded border border-white/10 bg-white/[0.02] flex items-center justify-center text-[9px] text-zinc-500 font-bold">2</div>
+                                  <span>Reveal correct answer & review explanation details</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px] text-zinc-400">
+                                  <div className="h-4 w-4 rounded border border-white/10 bg-white/[0.02] flex items-center justify-center text-[9px] text-zinc-500 font-bold">3</div>
+                                  <span>Simulate 1 timed <strong>AI Mock Pre-test</strong> to record speed benchmark</span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         ) : (
                           <div className="space-y-2.5">
@@ -3036,15 +3162,138 @@ export default function SmartLadderPage() {
                               );
                             })()}
 
-                            <p className="text-[10px] text-zinc-500 leading-normal font-medium border-t border-emerald-500/10 pt-2.5 mt-1">
+                            <p className="text-[10px] text-zinc-550 leading-normal font-medium border-t border-emerald-500/10 pt-2.5 mt-1">
                               💡 <em>Focus on Quantitative speed drills using unit-digit and cycle-check shortcuts to cut solving latency down by 10s.</em>
                             </p>
-                            <p className="text-[10px] text-zinc-500 leading-normal font-medium">
+                            <p className="text-[10px] text-zinc-550 leading-normal font-medium">
                               🎯 <em>Try mock exams under time pressure — candidates who simulate real conditions score 20–30% higher in placement rounds.</em>
                             </p>
                           </div>
                         )}
-                        
+
+                        {/* AI Speed & Latency Calibration - ALWAYS RENDERED */}
+                        <div className="p-3.5 rounded-xl border border-white/5 bg-black/40 space-y-2">
+                          <div className="flex justify-between items-center text-[9px] font-bold text-zinc-400 uppercase tracking-widest">
+                            <span>AI Speed & Latency Calibration</span>
+                            {aptStats.solvedCount > 0 ? (
+                              <span className="text-[8px] text-violet-400 lowercase italic">latency analysis active</span>
+                            ) : (
+                              <span className="text-[8px] text-zinc-500 lowercase italic">awaiting baseline</span>
+                            )}
+                          </div>
+                          
+                          <div className="space-y-1.5 w-full">
+                            {/* Quantitative */}
+                            <div className="p-2 rounded-lg border border-white/[0.02] bg-white/[0.01] flex items-center justify-between gap-2 w-full">
+                              <div className="min-w-0">
+                                <span className="text-[10px] text-zinc-350 font-semibold block truncate">Quantitative Aptitude</span>
+                                <span className="text-[8px] text-zinc-550 font-bold block uppercase tracking-wider">Target: 45s</span>
+                              </div>
+                              {aptStats.solvedCount === 0 ? (
+                                <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-zinc-500/10 text-zinc-450 border border-zinc-500/10 shrink-0">Awaiting Solve</span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-450 border border-rose-500/10 shrink-0">54s (High Latency)</span>
+                              )}
+                            </div>
+
+                            {/* Logical */}
+                            <div className="p-2 rounded-lg border border-white/[0.02] bg-white/[0.01] flex items-center justify-between gap-2 w-full">
+                              <div className="min-w-0">
+                                <span className="text-[10px] text-zinc-350 font-semibold block truncate">Logical Reasoning</span>
+                                <span className="text-[8px] text-zinc-550 font-bold block uppercase tracking-wider">Target: 30s</span>
+                              </div>
+                              {aptStats.solvedCount === 0 ? (
+                                <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-zinc-500/10 text-zinc-450 border border-zinc-500/10 shrink-0">Awaiting Solve</span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/10 shrink-0">26s (Optimal)</span>
+                              )}
+                            </div>
+
+                            {/* Verbal */}
+                            <div className="p-2 rounded-lg border border-white/[0.02] bg-white/[0.01] flex items-center justify-between gap-2 w-full">
+                              <div className="min-w-0">
+                                <span className="text-[10px] text-zinc-350 font-semibold block truncate">Verbal Ability</span>
+                                <span className="text-[8px] text-zinc-550 font-bold block uppercase tracking-wider">Target: 25s</span>
+                              </div>
+                              {aptStats.solvedCount === 0 ? (
+                                <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-zinc-500/10 text-zinc-450 border border-zinc-500/10 shrink-0">Awaiting Solve</span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/10 shrink-0">21s (Optimal)</span>
+                              )}
+                            </div>
+
+                            {/* Technical */}
+                            <div className="p-2 rounded-lg border border-white/[0.02] bg-white/[0.01] flex items-center justify-between gap-2 w-full">
+                              <div className="min-w-0">
+                                <span className="text-[10px] text-zinc-350 font-semibold block truncate">Technical & Coding</span>
+                                <span className="text-[8px] text-zinc-550 font-bold block uppercase tracking-wider">Target: 60s</span>
+                              </div>
+                              {aptStats.solvedCount === 0 ? (
+                                <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-zinc-500/10 text-zinc-450 border border-zinc-500/10 shrink-0">Awaiting Solve</span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/10 shrink-0">72s (Needs Review)</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* AI Calibration Timeline - ALWAYS RENDERED */}
+                        <div className="p-3.5 rounded-xl border border-white/5 bg-black/40 space-y-3">
+                          <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest block">AI Calibration Roadmap</span>
+                          <div className="space-y-3">
+                            {/* Step 1 */}
+                            <div className="flex gap-2.5 items-start">
+                              <div className="flex flex-col items-center shrink-0">
+                                <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                                  aptStats.solvedCount > 0
+                                    ? "bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-extrabold"
+                                    : "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 font-extrabold"
+                                }`}>
+                                  {aptStats.solvedCount > 0 ? "✓" : "1"}
+                                </div>
+                                <div className="w-0.5 h-4.5 bg-zinc-800 my-0.5" />
+                              </div>
+                              <div className="space-y-0.5 min-w-0">
+                                <span className={`text-[8px] font-bold uppercase ${aptStats.solvedCount > 0 ? "text-emerald-400" : "text-emerald-500"}`}>Benchmark Phase</span>
+                                <h5 className="text-[10px] font-semibold text-zinc-300">Capture Initial Speed</h5>
+                                <p className="text-[8px] text-zinc-550 leading-normal">
+                                  {aptStats.solvedCount > 0 ? "Initial benchmark speed captured successfully!" : "Initial daily set solves establish your core baseline solving latency."}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Step 2 */}
+                            <div className="flex gap-2.5 items-start">
+                              <div className="flex flex-col items-center shrink-0">
+                                <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold border ${
+                                  aptStats.solvedCount > 0
+                                    ? "bg-amber-500/10 border-amber-500/20 text-amber-400 animate-pulse font-extrabold"
+                                    : "bg-zinc-800 border-white/5 text-zinc-400 font-bold"
+                                }`}>2</div>
+                                <div className="w-0.5 h-4.5 bg-zinc-800 my-0.5" />
+                              </div>
+                              <div className="space-y-0.5 min-w-0">
+                                <span className={`text-[8px] font-bold uppercase ${aptStats.solvedCount > 0 ? "text-amber-400" : "text-zinc-500"}`}>Calibration Phase</span>
+                                <h5 className="text-[10px] font-semibold text-zinc-300">Scale Problem Difficulty</h5>
+                                <p className="text-[8px] text-zinc-550 leading-normal">Difficulty scales adaptively based on correct or incorrect responses.</p>
+                              </div>
+                            </div>
+
+                            {/* Step 3 */}
+                            <div className="flex gap-2.5 items-start">
+                              <div className="flex flex-col items-center shrink-0">
+                                <div className="h-5 w-5 rounded-full bg-zinc-800 border border-white/5 flex items-center justify-center text-[9px] font-bold text-zinc-400">3</div>
+                              </div>
+                              <div className="space-y-0.5 min-w-0">
+                                <span className="text-[8px] font-bold text-zinc-500 uppercase">Mastery Phase</span>
+                                <h5 className="text-[10px] font-semibold text-zinc-300">Target Placement Score</h5>
+                                <p className="text-[8px] text-zinc-550 leading-normal">Aggregated stats unlock personalized domain placement readiness.</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Focus Action Roadmap */}
                         <div className="border-t border-emerald-500/10 pt-2.5 mt-2.5 space-y-2">
                           <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest block">Focus Action Roadmap</span>
                           <ul className="text-[10px] text-zinc-450 space-y-1.5 pl-1.5 list-disc list-inside font-medium leading-relaxed">
@@ -3065,6 +3314,29 @@ export default function SmartLadderPage() {
                         <p className="text-[10px] text-zinc-400 leading-normal font-medium pt-1">
                           Verify large multiplications or additions on division tests by checking if the digital root of the question matches the digital root of the options. This eliminates 90% of arithmetic options in 3 seconds!
                         </p>
+                      </div>
+
+                      {/* Placement Strategy Pro-Tips Card */}
+                      <div className="p-4 rounded-xl border border-teal-500/10 bg-teal-500/[0.01] space-y-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <Zap className="h-3.5 w-3.5 text-teal-400" />
+                          <span className="text-[9px] font-bold text-teal-400 uppercase tracking-widest block">AI Prep Wisdom & Strategy</span>
+                        </div>
+                        <h4 className="font-bold text-xs text-white">Advanced Pre-Test Placement Tactics</h4>
+                        <div className="space-y-2">
+                          <div className="flex gap-2 items-start text-[10px] text-zinc-400 leading-relaxed">
+                            <span className="text-teal-400 font-bold shrink-0">1.</span>
+                            <p><strong>The 90-Second Rule:</strong> Never spend over 90 seconds on a single question. Mark it for review, skip, and maximize scoring on easier questions first.</p>
+                          </div>
+                          <div className="flex gap-2 items-start text-[10px] text-zinc-400 leading-relaxed">
+                            <span className="text-teal-400 font-bold shrink-0">2.</span>
+                            <p><strong>Digital Root Elimination:</strong> Verify high-value arithmetic by summing digits until a single digit remains, eliminating incorrect options instantly.</p>
+                          </div>
+                          <div className="flex gap-2 items-start text-[10px] text-zinc-400 leading-relaxed">
+                            <span className="text-teal-400 font-bold shrink-0">3.</span>
+                            <p><strong>Verbal Tense-Matching:</strong> Solve grammar error identification by checking subject-verb alignment first, which accounts for 75% of pre-test errors.</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
