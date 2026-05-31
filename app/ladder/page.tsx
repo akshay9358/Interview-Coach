@@ -379,6 +379,7 @@ export default function SmartLadderPage() {
   const [aptitudeAnswers, setAptitudeAnswers] = useState<Record<string, string>>({}); // questionId -> selectedOption
   const [aptitudeRevealed, setAptitudeRevealed] = useState<Record<string, boolean>>({}); // questionId -> boolean
   const [expandedSolvedId, setExpandedSolvedId] = useState<string | null>(null);
+  const [showAIPoolPreview, setShowAIPoolPreview] = useState(false);
   const [aptitudeDifficulties, setAptitudeDifficulties] = useState<Record<string, "Easy" | "Medium" | "Hard">>({
     "Quantitative": "Medium",
     "Logical": "Medium",
@@ -1340,26 +1341,33 @@ export default function SmartLadderPage() {
   // Dynamically load next unsolved question for a category
   const handleLoadNextAptitudeQuestion = (q: AptitudeQuestion) => {
     try {
-      const currentProfile = profileRef.current;
-      const currentSet = aptitudeSetRef.current;
-      if (!currentProfile) return;
+      const currentProfile = profileRef.current || profile;
+      const currentSet = aptitudeSetRef.current || aptitudeSet;
+      if (!currentProfile) {
+        showToast("Error: Profile not loaded yet.");
+        return;
+      }
 
       const currentDiff = aptitudeDifficulties[q.category] || "Medium";
+      const solvedPuzzles = currentProfile.solvedPuzzles || [];
+      const solvedPuzzleAnswers = currentProfile.solvedPuzzleAnswers || {};
 
       // 1. Try to retrieve from the Hugging Face AI-generated pool saved in profile first
       let pool: AptitudeQuestion[] = [];
       let aiPool: AptitudeQuestion[] = [];
-      if (currentProfile.solvedPuzzleAnswers && currentProfile.solvedPuzzleAnswers["ai_aptitude_pool"]) {
+      if (solvedPuzzleAnswers["ai_aptitude_pool"]) {
         try {
-          aiPool = JSON.parse(currentProfile.solvedPuzzleAnswers["ai_aptitude_pool"]);
-        } catch (e) {}
+          aiPool = JSON.parse(solvedPuzzleAnswers["ai_aptitude_pool"]);
+        } catch (e) {
+          console.error("Error parsing AI pool:", e);
+        }
       }
 
       pool = aiPool.filter(
         item => item.category === q.category &&
         item.difficulty === currentDiff &&
-        !currentProfile.solvedPuzzles.includes(item.id) &&
-        !(currentProfile.solvedPuzzleAnswers && currentProfile.solvedPuzzleAnswers[item.id])
+        !solvedPuzzles.includes(item.id) &&
+        !solvedPuzzleAnswers[item.id]
       );
 
       // 2. Fallback to hardcoded static pool if AI pool has no matching unsolved questions
@@ -1367,8 +1375,8 @@ export default function SmartLadderPage() {
         pool = APTITUDE_POOL.filter(
           item => item.category === q.category &&
           item.difficulty === currentDiff &&
-          !currentProfile.solvedPuzzles.includes(item.id) &&
-          !(currentProfile.solvedPuzzleAnswers && currentProfile.solvedPuzzleAnswers[item.id])
+          !solvedPuzzles.includes(item.id) &&
+          !solvedPuzzleAnswers[item.id]
         );
       }
 
@@ -1376,16 +1384,16 @@ export default function SmartLadderPage() {
       if (pool.length === 0) {
         pool = aiPool.filter(
           item => item.category === q.category &&
-          !currentProfile.solvedPuzzles.includes(item.id) &&
-          !(currentProfile.solvedPuzzleAnswers && currentProfile.solvedPuzzleAnswers[item.id])
+          !solvedPuzzles.includes(item.id) &&
+          !solvedPuzzleAnswers[item.id]
         );
       }
 
       if (pool.length === 0) {
         pool = APTITUDE_POOL.filter(
           item => item.category === q.category &&
-          !currentProfile.solvedPuzzles.includes(item.id) &&
-          !(currentProfile.solvedPuzzleAnswers && currentProfile.solvedPuzzleAnswers[item.id])
+          !solvedPuzzles.includes(item.id) &&
+          !solvedPuzzleAnswers[item.id]
         );
       }
 
@@ -1424,16 +1432,16 @@ export default function SmartLadderPage() {
       saveUserProfile(uProf);
       setProfile(uProf);
 
-      showToast(`Loaded a new dynamic ${q.category} question!`);
+      showToast(`Loaded a new ${nextQ.source === "cloud_ai" ? "Cloud AI" : nextQ.source === "procedural" ? "Local Engine" : "Core Pool"} ${q.category} question!`);
     } catch (err: any) {
       console.error("Error loading next question:", err);
-      showToast(`Failed to load dynamic question. Reverting to pool fallback...`);
+      showToast(`Error: ${err.message || "Failed to load next question."}`);
       
       // Fallback: pick any random static question from the pool
       try {
         const fallbackPool = APTITUDE_POOL.filter(item => item.category === q.category && item.id !== q.id);
         const fallbackQ = fallbackPool[Math.floor(Math.random() * fallbackPool.length)] || q;
-        const currentSet = aptitudeSetRef.current;
+        const currentSet = aptitudeSetRef.current || aptitudeSet;
         const updatedSet = currentSet.map(item => item.id === q.id ? fallbackQ : item);
         setAptitudeSet(updatedSet);
         
@@ -2757,6 +2765,14 @@ interface GeneratedQuestion {
                       </div>
                       <div className="flex items-center gap-2">
                         {profile?.solvedPuzzleAnswers?.["ai_aptitude_pool"] && (
+                          <button
+                            onClick={() => setShowAIPoolPreview(!showAIPoolPreview)}
+                            className="px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white transition-all text-[9px] font-extrabold uppercase tracking-wider cursor-pointer active:scale-95"
+                          >
+                            {showAIPoolPreview ? "Hide Preview" : "View Pool"}
+                          </button>
+                        )}
+                        {profile?.solvedPuzzleAnswers?.["ai_aptitude_pool"] && (
                           <span className="text-[9px] text-zinc-500 font-bold uppercase select-none">
                             AI Pool: {(() => {
                               try {
@@ -2781,6 +2797,48 @@ interface GeneratedQuestion {
                     <p className="text-xs text-zinc-400 leading-relaxed font-medium">
                       These questions adapt in real-time. Correct answers boost you to harder tiers (+15 XP), incorrect choices display instant AI rubrics.
                     </p>
+
+                    {/* Expandable pool preview list */}
+                    {showAIPoolPreview && profile?.solvedPuzzleAnswers?.["ai_aptitude_pool"] && (
+                      <div className="p-4 rounded-xl border border-white/5 bg-zinc-950/60 space-y-3 max-h-60 overflow-y-auto animate-fadeIn select-none">
+                        <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                          <span className="text-[10px] font-bold text-violet-400 uppercase tracking-wider">📦 Hugging Face Cloud Pool ({JSON.parse(profile.solvedPuzzleAnswers["ai_aptitude_pool"]).length} Qs)</span>
+                          <span className="text-[8px] text-zinc-500 font-medium">Synced Cloud AI questions in your Supabase store</span>
+                        </div>
+                        <div className="space-y-2">
+                          {(() => {
+                            try {
+                              const items = JSON.parse(profile.solvedPuzzleAnswers["ai_aptitude_pool"]) as AptitudeQuestion[];
+                              if (items.length === 0) return <p className="text-[10px] text-zinc-500 italic text-center py-2">Pool is currently empty. Click Sync to fetch questions!</p>;
+                              return items.map((item, idx) => (
+                                <div key={item.id || idx} className="p-2.5 rounded-lg border border-white/[0.02] bg-white/[0.01] flex items-center justify-between gap-3 text-[10px]">
+                                  <div className="space-y-0.5 min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-extrabold text-violet-400 uppercase text-[8px] tracking-wider">{item.category}</span>
+                                      <span className={`px-1.5 py-0.2 rounded text-[7px] font-bold border ${
+                                        item.difficulty === "Easy" ? "border-emerald-500/20 text-emerald-400 bg-emerald-500/5" :
+                                        item.difficulty === "Medium" ? "border-amber-500/20 text-amber-400 bg-amber-500/5" :
+                                        "border-rose-500/20 text-rose-400 bg-rose-500/5"
+                                      }`}>{item.difficulty}</span>
+                                      <span className="px-1 py-0.2 rounded text-[6px] font-bold border border-violet-500/20 text-violet-300 bg-violet-500/5 uppercase tracking-widest flex items-center gap-0.5">
+                                        <Sparkles className="h-1.5 w-1.5 text-violet-400" />
+                                        Cloud AI
+                                      </span>
+                                    </div>
+                                    <p className="text-zinc-300 truncate font-medium leading-normal">{item.question}</p>
+                                  </div>
+                                  <span className="text-[8px] font-extrabold text-emerald-400 uppercase tracking-widest shrink-0 bg-emerald-500/5 border border-emerald-500/10 px-1.5 py-0.5 rounded" title="Correct Answer">
+                                    Ans: {item.answer}
+                                  </span>
+                                </div>
+                              ));
+                            } catch (e) {
+                              return <p className="text-[10px] text-rose-400 italic text-center py-2">Failed to parse pool preview data.</p>;
+                            }
+                          })()}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="space-y-6 pt-2">
                       {aptitudeSet.map((q, idx) => {
